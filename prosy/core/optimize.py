@@ -64,3 +64,46 @@ def optimize_cds(
     if not result.verify():
         raise RuntimeError("Optimized DNA does not translate back to the input protein.")
     return result
+
+
+@dataclass
+class Fragment:
+    """A synthesis-ready fragment: optimized coding region plus flanks/padding."""
+
+    protein: str
+    coding: str          # codon-optimized CDS (constraint-clean)
+    final: str           # coding wrapped in flanks and padded to min length
+    backend: str
+
+
+def build_fragment(
+    protein: str,
+    *,
+    species: str = "e_coli",
+    constraints: ConstraintSet | None = None,
+    flanks=None,
+    min_length: int = 0,
+    pad_constraints: ConstraintSet | None = None,
+    backend: codon.CodonBackend | str | None = None,
+    seed: int = 0,
+) -> Fragment:
+    """End-to-end single-protein pipeline: optimize CDS -> add flanks -> pad.
+
+    This is the reusable composition of :func:`optimize_cds`,
+    :func:`prosy.core.cloning.add_flanks` and
+    :func:`prosy.core.cloning.pad_to_length` that task scripts repeat.
+    ``flanks`` is an optional :class:`prosy.core.cloning.Flanks`.
+    """
+    from prosy.core.cloning import Flanks, add_flanks, pad_to_length
+
+    if backend is None or isinstance(backend, str):
+        backend = codon.get_backend(backend, seed=seed)
+
+    result = optimize_cds(protein, species=species, constraints=constraints, backend=backend)
+    seq = result.dna
+    if flanks is not None:
+        seq = add_flanks(seq, flanks if isinstance(flanks, Flanks) else Flanks(*flanks))
+    if min_length and len(seq) < min_length:
+        seq = pad_to_length(seq, min_length, constraints=pad_constraints,
+                            species=species, seed=seed)
+    return Fragment(protein=result.protein, coding=result.dna, final=seq, backend=backend.name)

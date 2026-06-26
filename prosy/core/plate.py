@@ -52,3 +52,15 @@ class PlateFormat:
 
 PLATE_96 = PlateFormat(8, 12)
 PLATE_384 = PlateFormat(16, 24)
+
+
+def resolve_plate_format(plate: "PlateFormat | str | int") -> PlateFormat:
+    """Accept a PlateFormat, a size (96/384) or a name ('96'/'384')."""
+    if isinstance(plate, PlateFormat):
+        return plate
+    key = str(plate).strip().lower()
+    if key in {"96", "96-well", "plate_96"}:
+        return PLATE_96
+    if key in {"384", "384-well", "plate_384"}:
+        return PLATE_384
+    raise ValueError(f"Unknown plate {plate!r}; use 96, 384 or a PlateFormat.")

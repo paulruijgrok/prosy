@@ -16,7 +16,20 @@ dependencies = [
 # DNAChisel is the default production codon backend (global constraint solver).
 # Without it, prosy falls back to a dependency-free optimizer.
 optimize = ["dnachisel>=3.2"]
+# Wider synthetic-biology ecosystem (optional, none required by the core):
+#   biopython           - sequence I/O, translation, SeqRecord/FASTA/GenBank
+#   python-codon-tables - codon-usage tables for many organisms
+#   plateo              - plate modeling, plate-map graphics, robot picklists
+bio = [
+    "biopython>=1.81",
+    "python-codon-tables>=0.1.12",
+    "plateo>=0.3.1",
+]
+# PNG plate-map export (SVG export needs no dependencies):
+viz = ["matplotlib>=3.5"]
 dev = ["pytest>=7"]
+all = ["dnachisel>=3.2", "biopython>=1.81", "python-codon-tables>=0.1.12",
+       "plateo>=0.3.1", "matplotlib>=3.5", "pytest>=7"]
 
 [tool.setuptools.packages.find]
 include = ["prosy*"]

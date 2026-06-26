@@ -20,7 +20,10 @@ ProSy is split in two:
 | `codon` | Codon-usage tables and two interchangeable optimization backends. |
 | `optimize` | `optimize_cds()` — high-level protein → synthesis-ready CDS. |
 | `cloning` | Flank/adapter application and minimum-length padding (input preserved verbatim). |
+| `optimize` | Also `build_fragment()` — the optimize → flank → pad composition. |
 | `plate` | 96-/384-well coordinate helpers, column- or row-major fill. |
+| `layout` | Place groups (parent + N mutants) onto a plate; row/column packing, 96/384, alignment checks. |
+| `platemap` | Dependency-free SVG plate-map renderer (colour-coded, labeled); optional PNG via matplotlib/LibreOffice. |
 | `io` | Read/write CSV/TSV/XLSX, flexible column matching, vendor plate-sheet writer. |
 
 ## Codon backends
@@ -40,6 +43,16 @@ Install the production backend with:
 ```bash
 pip install -e ".[optimize]"
 ```
+
+## Optional extras
+
+The core needs only `openpyxl`. Optional feature groups:
+
+- `.[optimize]` — DNAChisel (production codon backend).
+- `.[viz]` — matplotlib (PNG plate maps; SVG needs nothing).
+- `.[bio]` — Biopython, python-codon-tables, Plateo (wider synbio ecosystem:
+  sequence I/O, codon tables for many organisms, plate graphics / robot picklists).
+- `.[all]` — everything above plus pytest.
 
 ## Quick start
 

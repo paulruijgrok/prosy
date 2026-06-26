@@ -77,6 +77,19 @@ def test_get_backend_auto():
     assert b.name in {"dnachisel", "highest_frequency"}
 
 
+def test_platemap_svg_render():
+    from prosy.core import platemap
+    cells = {
+        "A1": platemap.Cell(top="Nb01", bottom="(parent)", category="ADL1", emphasize=True),
+        "B1": platemap.Cell(top="Nb73", bottom="N96A", category="ADL1"),
+        "A2": platemap.Cell(top="Nb50", bottom="(parent)", category="KRU1", emphasize=True),
+    }
+    svg = platemap.render_svg(cells, plate=96, title="test")
+    assert svg.startswith("<svg") and svg.rstrip().endswith("</svg>")
+    assert "Nb73" in svg and "N96A" in svg
+    assert "ADL1" in svg and "KRU1" in svg  # legend categories
+
+
 def _run_all():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     passed = 0
