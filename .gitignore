@@ -1,0 +1,30 @@
+# --- Project data (not part of the package) ---
+Working folder/
+Inspiration code/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# --- OS / editor ---
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# --- LibreOffice / Office temp & lock files ---
+.~lock.*#
+~$*
+*.tmp

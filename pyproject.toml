@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prosy"
+version = "0.1.0"
+description = "Tools to turn protein sequences into synthesis-ready DNA"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+# DNAChisel is the default production codon backend (global constraint solver).
+# Without it, prosy falls back to a dependency-free optimizer.
+optimize = ["dnachisel>=3.2"]
+dev = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+include = ["prosy*"]
