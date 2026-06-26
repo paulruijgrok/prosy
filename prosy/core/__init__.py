@@ -5,7 +5,10 @@ strategy: enzymes, codon tables, GC targets, flanks and assembly choices are
 all passed in as parameters. Task scripts compose these pieces.
 """
 
-from prosy.core import sequence, enzymes, constraints, codon, optimize, cloning, plate, io
+from prosy.core import (
+    sequence, enzymes, constraints, codon, optimize, cloning, plate, layout,
+    platemap, io,
+)
 
 __all__ = [
     "sequence",
@@ -15,5 +18,7 @@ __all__ = [
     "optimize",
     "cloning",
     "plate",
+    "layout",
+    "platemap",
     "io",
 ]
