@@ -1,7 +1,6 @@
 # ProSy
 
-Tools to turn protein sequences into DNA sequences ready to order from a
-synthesis vendor.
+Tools to turn protein sequences into ready-to-order DNA sequences.
 
 ProSy is split in two:
 
