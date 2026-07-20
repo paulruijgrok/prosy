@@ -23,7 +23,7 @@ Target evolved during the session: first "below 76%" (→ windows land at 76.0%)
 then tightened to "below 75%". Because a 50 bp window's GC moves in 2% steps,
 `--gc-max 75` resolves to **≤74%** in practice. Default is now 75%.
 
-## Files touched (all uncommitted as of this journal)
+## Files touched (committed as `c080363` on `feature/prosy-core`)
 
 - `prosy/core/codon.py` — `DnaChiselBackend.optimize` rewritten to embed the CDS
   in fixed left/right flank context, add `gc_window`, apply `AvoidChanges` to
@@ -82,10 +82,9 @@ python gc_sliding_window.py \
 
 ## Open items / next steps
 
-- **Not committed yet.** Changes are staged in the working tree only; needs a
-  commit + PR description (motivation, verification, this journal link). No
-  commit hashes exist for this work yet — update this journal with them once
-  committed.
+- **Committed and pushed** as `c080363` on `feature/prosy-core` (rebased onto
+  origin's `12b234b` README tweak; original pre-rebase hash was `06b0334`).
+  Still on the feature branch — not yet merged to `main`; open a PR when ready.
 - **Fallback backend does not enforce windowed GC** — `HighestFrequencyBackend`
   accepts `gc_window`/context but ignores them. Fine while production uses
   DNAChisel, but the pipeline's `verify()` windowed check would fail a
