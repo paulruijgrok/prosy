@@ -21,6 +21,13 @@ Parents are matched to the TSVs by full protein sequence. Mutations are ranked b
 is codon-optimized (E. coli, BsaI-avoiding by default), flanked, and padded to a
 minimum length.
 
+By default the codon optimizer also holds the local GC content at or below 75%
+over every 50 bp sliding window (`--gc-window`/`--gc-max`). The coding region is
+optimized *inside its fixed flank context*, so the cap holds across the
+flank/coding junction at the 5' end (a known GC hot spot), not just within the
+coding region. The run self-verifies this on the final fragment. Set
+`--gc-window 0` to disable and reproduce the pre-cap behaviour.
+
 **IDs:** each mutant gets a new sequential `NbID` (default series from `Nb73`,
 assigned in plate-fill order) plus a descriptive `NbID_parent` like `Nb01_T27F`.
 Parents keep their own ID. Plate `Name` = `"<NbID> <NbID_parent>"` for mutants.
@@ -47,6 +54,9 @@ Parents keep their own ID. Plate `Name` = `"<NbID> <NbID_parent>"` for mutants.
 | `--species` | `e_coli` | Codon-optimization species. |
 | `--avoid-enzymes` | `BsaI` | Enzyme sites to avoid in coding regions. |
 | `--min-length` | `300` | Minimum fragment length (bp). |
+| `--gc-window` | `50` | Sliding-window width (bp) for the local GC cap; `0` disables. |
+| `--gc-max` | `75` | Max GC%% allowed in any `--gc-window` (a 50 bp window resolves this to ≤74%). |
+| `--gc-min` | `0` | Min GC%% required in any `--gc-window` (`0` = no floor). |
 | `--new-id-start` / `--new-id-prefix` | `73` / `Nb` | New mutant ID series. |
 | `--backend` | `auto` | `auto` / `dnachisel` / `highest_frequency`. |
 | `--stamp` | `260626` | Output filename prefix. |

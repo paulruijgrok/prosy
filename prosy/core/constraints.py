@@ -30,6 +30,7 @@ class ConstraintSet:
     max_homopolymer: int | None = None  # e.g. 4 -> forbid 5+ identical bases
     forbid_low_complexity: bool = False
     gc_bounds: tuple[float, float] | None = None
+    gc_window: int | None = None  # bp; if set, gc_bounds apply per sliding window
 
     def patterns(self) -> list[str]:
         out: list[str] = []

@@ -46,6 +46,9 @@ class RunConfig:
     species: str = "e_coli"
     avoid_enzymes: list[str] = field(default_factory=lambda: ["BsaI"])
     min_length: int = 300
+    gc_window: int | None = None          # bp; sliding-window GC cap width (None = off)
+    gc_max: float = 0.75                  # upper GC fraction per window
+    gc_min: float = 0.0                   # lower GC fraction per window
     mutations_per_parent: int = 7
     new_id_start: int = 73
     new_id_prefix: str = "Nb"
@@ -202,7 +205,11 @@ def assign_wells(variants: list[Variant], parent_order: list[str], cfg: RunConfi
 
 
 def optimize_all(variants: list[Variant], backend, cfg: RunConfig, *, seed: int) -> None:
-    constraints = ConstraintSet(avoid_enzymes=cfg.avoid_enzymes)
+    constraints = ConstraintSet(
+        avoid_enzymes=cfg.avoid_enzymes,
+        gc_bounds=(cfg.gc_min, cfg.gc_max) if cfg.gc_window else None,
+        gc_window=cfg.gc_window,
+    )
     pad_constraints = ConstraintSet(
         avoid_enzymes=cfg.avoid_enzymes, max_homopolymer=4,
         forbid_low_complexity=True, gc_bounds=(0.30, 0.70),
@@ -285,6 +292,26 @@ def write_outputs(variants: list[Variant], out_dir: Path, stamp: str, cfg: RunCo
     return result
 
 
+def max_window_gc(dna: str, window: int) -> tuple[float, float]:
+    """Return (min, max) GC fraction over sliding windows of ``window`` bp.
+
+    Sequences shorter than ``window`` are measured whole.
+    """
+    dna = dna.upper()
+    n = len(dna)
+    if n == 0:
+        return 0.0, 0.0
+    if n <= window:
+        gc = (dna.count("G") + dna.count("C")) / n
+        return gc, gc
+    lo, hi = 1.0, 0.0
+    for i in range(n - window + 1):
+        w = dna[i:i + window]
+        gc = (w.count("G") + w.count("C")) / window
+        lo, hi = min(lo, gc), max(hi, gc)
+    return lo, hi
+
+
 def verify(variants: list[Variant], cfg: RunConfig) -> list[str]:
     """Return a list of problems; empty means all checks pass."""
     from prosy.core import enzymes
@@ -293,6 +320,9 @@ def verify(variants: list[Variant], cfg: RunConfig) -> list[str]:
     avoided = enzymes.patterns_for(cfg.avoid_enzymes)
     wells_seen: set[str] = set()
     new_ids: list[str] = []
+
+    # Small tolerance so a window landing exactly on the cap isn't flagged.
+    gc_tol = 1e-9
 
     for v in variants:
         if translate(v.dna_coding) != v.protein:
@@ -308,6 +338,16 @@ def verify(variants: list[Variant], cfg: RunConfig) -> list[str]:
             problems.append(f"{v.descriptive_id}: coding region not preserved in final.")
         if len(v.dna_final) < cfg.min_length:
             problems.append(f"{v.descriptive_id}: final length {len(v.dna_final)} < {cfg.min_length}.")
+        if cfg.gc_window:
+            lo, hi = max_window_gc(v.dna_final, cfg.gc_window)
+            if hi > cfg.gc_max + gc_tol:
+                problems.append(
+                    f"{v.descriptive_id}: max {cfg.gc_window}bp-window GC {hi*100:.1f}% "
+                    f"> cap {cfg.gc_max*100:.1f}%.")
+            if cfg.gc_min > 0 and lo < cfg.gc_min - gc_tol:
+                problems.append(
+                    f"{v.descriptive_id}: min {cfg.gc_window}bp-window GC {lo*100:.1f}% "
+                    f"< floor {cfg.gc_min*100:.1f}%.")
         if v.well in wells_seen:
             problems.append(f"{v.descriptive_id}: duplicate well {v.well}.")
         wells_seen.add(v.well)

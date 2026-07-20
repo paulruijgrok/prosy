@@ -16,7 +16,7 @@ ProSy is split in two:
 |---|---|
 | `sequence` | Genetic code, translation, reverse-complement, point-mutation parsing/applying, validation. |
 | `enzymes` | Restriction-enzyme registry (BsaI, BsmBI, BbsI, SapI, EcoRI, …) with both-strand patterns and Type IIS cut metadata. |
-| `constraints` | Declarative `ConstraintSet` → flat list of forbidden patterns + GC bounds for a backend. |
+| `constraints` | Declarative `ConstraintSet` → flat list of forbidden patterns + GC bounds (global or per sliding window) for a backend. |
 | `codon` | Codon-usage tables and two interchangeable optimization backends. |
 | `optimize` | `optimize_cds()` — high-level protein → synthesis-ready CDS. |
 | `cloning` | Flank/adapter application and minimum-length padding (input preserved verbatim). |

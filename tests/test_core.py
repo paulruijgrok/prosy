@@ -56,6 +56,29 @@ def test_optimize_translation_roundtrip():
     assert translate(res.dna) == "MAAKLEER"
 
 
+def test_windowed_gc_cap_with_flank_context():
+    # Windowed GC is enforced by DNAChisel's global solver; skip if unavailable.
+    try:
+        import dnachisel  # noqa: F401
+    except Exception:
+        return
+    from prosy.core.codon import DnaChiselBackend
+
+    left, right = "TGTATCGGTCTCGAGGA", "GGTTCCGGAGACCTCTAGT"
+    cap, window = 0.75, 50
+    cons = ConstraintSet(avoid_enzymes=["BsaI"], gc_bounds=(0.0, cap), gc_window=window)
+    res = optimize_cds(PROTEIN, constraints=cons, backend=DnaChiselBackend(),
+                       left_context=left, right_context=right)
+    assert res.verify()
+    assert "GGTCTC" not in res.dna and "GAGACC" not in res.dna  # coding stays clean
+    final = (left + res.dna + right).upper()
+    worst = max(
+        (final[i:i + window].count("G") + final[i:i + window].count("C")) / window
+        for i in range(len(final) - window + 1)
+    )
+    assert worst <= cap + 1e-9  # every window, junction included, respects the cap
+
+
 def test_padding_reaches_min_length_and_preserves_core():
     cons = ConstraintSet(avoid_enzymes=["BsaI"], max_homopolymer=4,
                          forbid_low_complexity=True, gc_bounds=(0.30, 0.70))
