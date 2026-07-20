@@ -80,6 +80,13 @@ def main() -> None:
     p.add_argument("--species", default="e_coli")
     p.add_argument("--avoid-enzymes", nargs="*", default=["BsaI"], metavar="ENZYME")
     p.add_argument("--min-length", type=int, default=300)
+    p.add_argument("--gc-window", type=int, default=50, metavar="BP",
+                   help="Sliding-window width (bp) for the local GC cap; 0 disables (default: 50).")
+    p.add_argument("--gc-max", type=float, default=75.0, metavar="PCT",
+                   help="Max GC%% allowed in any --gc-window (default: 75; "
+                        "a 50 bp window resolves this to <=74%% in practice).")
+    p.add_argument("--gc-min", type=float, default=0.0, metavar="PCT",
+                   help="Min GC%% required in any --gc-window (default: 0 = no floor).")
     p.add_argument("--new-id-start", type=int, default=73)
     p.add_argument("--new-id-prefix", default="Nb")
     p.add_argument("--backend", choices=["auto", "dnachisel", "highest_frequency"],
@@ -91,7 +98,10 @@ def main() -> None:
     cfg = nb.RunConfig(
         flanks=Flanks(five_prime=args.flank_5, three_prime=args.flank_3),
         species=args.species, avoid_enzymes=args.avoid_enzymes,
-        min_length=args.min_length, mutations_per_parent=args.mutations_per_parent,
+        min_length=args.min_length,
+        gc_window=args.gc_window if args.gc_window > 0 else None,
+        gc_max=args.gc_max / 100.0, gc_min=args.gc_min / 100.0,
+        mutations_per_parent=args.mutations_per_parent,
         new_id_start=args.new_id_start, new_id_prefix=args.new_id_prefix,
         orientation=args.orientation, plate_size=args.plate_size,
         plate_map=args.plate_map,
@@ -116,6 +126,11 @@ def main() -> None:
     print(f"Parents ({len(parent_order)}): {', '.join(parent_order)}")
     print(f"Species: {cfg.species}  Avoid: {cfg.avoid_enzymes or '(none)'}  "
           f"Min length: {cfg.min_length}")
+    if cfg.gc_window:
+        floor = f", min {cfg.gc_min*100:.0f}%" if cfg.gc_min > 0 else ""
+        print(f"GC cap: max {cfg.gc_max*100:.0f}%{floor} over {cfg.gc_window} bp windows")
+    else:
+        print("GC cap: (none)")
     print(f"Flanks: 5'={cfg.flanks.five_prime}  3'={cfg.flanks.three_prime}")
     print(f"Mutations/parent: {cfg.mutations_per_parent}  "
           f"New IDs from: {cfg.new_id_prefix}{cfg.new_id_start}")

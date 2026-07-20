@@ -19,7 +19,6 @@ import random
 from typing import Protocol
 
 from prosy.core.sequence import (
-    SYNONYMOUS_CODONS,
     SequenceError,
     translate,
     validate_protein,
@@ -110,8 +109,19 @@ class CodonBackend(Protocol):
         species: str = "e_coli",
         avoid_patterns: list[str] | None = None,
         gc_bounds: tuple[float, float] | None = None,
+        gc_window: int | None = None,
+        left_context: str = "",
+        right_context: str = "",
     ) -> str:
-        """Return a coding DNA sequence for ``protein`` meeting the constraints."""
+        """Return a coding DNA sequence for ``protein`` meeting the constraints.
+
+        ``gc_bounds`` are applied over the whole coding region; when
+        ``gc_window`` is given the GC bounds instead apply to every sliding
+        window of that width (bp). ``left_context``/``right_context`` are fixed
+        flanking sequences (e.g. cloning adapters) held immutable during
+        optimization so that windowed GC spans the flank/coding junctions; only
+        the coding region is returned.
+        """
         ...
 
 
@@ -139,7 +149,14 @@ class HighestFrequencyBackend:
         species: str = "e_coli",
         avoid_patterns: list[str] | None = None,
         gc_bounds: tuple[float, float] | None = None,
+        gc_window: int | None = None,
+        left_context: str = "",
+        right_context: str = "",
     ) -> str:
+        # This dependency-free fallback enforces GC over the whole coding region
+        # only; it does not solve the windowed-GC / fixed-context problem (that
+        # needs DNAChisel's global solver). gc_window and the flank contexts are
+        # accepted for interface parity but not enforced here.
         protein = validate_protein(protein)
         table = usage_table(species)
         avoid = [p.upper() for p in (avoid_patterns or [])]
@@ -265,8 +282,12 @@ class DnaChiselBackend:
         species: str = "e_coli",
         avoid_patterns: list[str] | None = None,
         gc_bounds: tuple[float, float] | None = None,
+        gc_window: int | None = None,
+        left_context: str = "",
+        right_context: str = "",
     ) -> str:
         from dnachisel import (
+            AvoidChanges,
             AvoidPattern,
             CodonOptimize,
             DnaOptimizationProblem,
@@ -276,22 +297,41 @@ class DnaChiselBackend:
         )
 
         protein = validate_protein(protein)
-        initial = reverse_translate(protein)
-        constraints = [EnforceTranslation()]
+        coding = reverse_translate(protein)
+        left = (left_context or "").upper()
+        right = (right_context or "").upper()
+
+        # Optimize the coding region embedded in its fixed flank context, so a
+        # windowed GC constraint sees the real neighbourhood at each junction.
+        full = left + coding + right
+        cstart, cend = len(left), len(left) + len(coding)
+        coding_loc = (cstart, cend)
+
+        constraints = [EnforceTranslation(location=coding_loc)]
+        if left:
+            constraints.append(AvoidChanges(location=(0, cstart)))
+        if right:
+            constraints.append(AvoidChanges(location=(cend, len(full))))
+        # Forbidden patterns apply to the coding region only; the flanks are
+        # fixed and may legitimately contain e.g. the Type IIS site themselves.
         for pat in avoid_patterns or []:
-            constraints.append(AvoidPattern(pat))
-        if gc_bounds is not None:
-            constraints.append(EnforceGCContent(mini=gc_bounds[0], maxi=gc_bounds[1]))
+            constraints.append(AvoidPattern(pat, location=coding_loc))
+        if gc_bounds is not None or gc_window is not None:
+            mini, maxi = gc_bounds if gc_bounds is not None else (0.0, 1.0)
+            gc_kwargs = {"mini": mini, "maxi": maxi}
+            if gc_window is not None:
+                gc_kwargs["window"] = gc_window
+            constraints.append(EnforceGCContent(**gc_kwargs))
 
         problem = DnaOptimizationProblem(
-            sequence=initial,
+            sequence=full,
             constraints=constraints,
-            objectives=[CodonOptimize(species=species)],
+            objectives=[CodonOptimize(species=species, location=coding_loc)],
             logger=None,
         )
         problem.resolve_constraints()
         problem.optimize()
-        return problem.sequence
+        return problem.sequence[cstart:cend]
 
 
 def dnachisel_available() -> bool:
