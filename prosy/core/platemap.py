@@ -11,7 +11,7 @@ the optional Plateo package ([bio] extra) is the recommended route.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from prosy.core.plate import PlateFormat, resolve_plate_format

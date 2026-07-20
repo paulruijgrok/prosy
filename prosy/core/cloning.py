@@ -9,7 +9,6 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from prosy.core import codon as codon_mod
 from prosy.core.constraints import ConstraintSet
 from prosy.core.sequence import SequenceError
 
