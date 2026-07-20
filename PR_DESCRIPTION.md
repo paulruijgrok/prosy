@@ -1,57 +1,47 @@
-# Add sliding-window GC cap to nanobody DNA fragment design
+# Add codon-view and rare-codon inspection tools; tighten GC default to 72%
 
 ## Summary
 
-The 260626 nanobody plate fragments had a 5' GC hot spot: a 50 bp sliding-window
-scan of the final (flanked) sequences peaked at **84% GC** near the flank/coding
-junction — a synthesis risk. The root cause was that the codon optimizer applied
-**no GC constraint at all** to the coding region (only the rarely-used padding was
-bounded 0.30–0.70).
-
-This PR adds a windowed GC cap to the codon-optimization path and, crucially,
-enforces it **across the flank/coding junction** rather than only within the CDS,
-by optimizing the coding region embedded in its fixed flank context.
+Follow-up to the windowed GC cap. Once the cap was in place we needed to (a) read
+the resulting sequences at the codon level and (b) confirm the cap wasn't degrading
+codon quality (e.g. swapping preferred glycine codons for the rare `GGA`). This PR
+adds two inspection tools and, on the strength of what they showed, tightens the
+production GC cap from 75% to **72%** — verified to introduce no rare codons.
 
 ## Changes
 
-- **`prosy/core/codon.py`** — `DnaChiselBackend.optimize` now embeds the CDS in
-  its fixed left/right flank context (flanks frozen via `AvoidChanges`;
-  `AvoidPattern`/`EnforceTranslation`/`CodonOptimize` scoped to the coding
-  location) and applies `EnforceGCContent(window=…)`; it returns just the CDS
-  slice. `gc_window`/`left_context`/`right_context` added to the `CodonBackend`
-  Protocol and the highest-frequency fallback (fallback accepts but does not
-  enforce windowing). Removed a pre-existing unused import.
-- **`prosy/core/constraints.py`** — new `gc_window` field on `ConstraintSet`.
-- **`prosy/core/optimize.py`** — `optimize_cds` and `build_fragment` thread
-  `gc_window` + flank context; `build_fragment` passes the flanks as fixed
-  context into `optimize_cds`.
-- **`scripts/nanobodies/nanobody_common.py`** — `RunConfig` gains
-  `gc_window`/`gc_max`/`gc_min`; `optimize_all` builds the windowed constraint;
-  `verify()` adds a `max_window_gc()` self-check that fails the run if any final
-  fragment breaches the cap.
-- **`scripts/nanobodies/make_nanobody_plate.py`** — new `--gc-window` (50),
-  `--gc-max` (75), `--gc-min` (0) flags; run summary prints the active cap.
-- **`scripts/nanobodies/gc_sliding_window.py`** — new standalone tool:
-  sliding-window GC over a mapping CSV → long-format CSV + overlay plot (mean
-  track, out-of-bounds flagging).
-- Docs (`README.md`, `scripts/nanobodies/README.md`), a new dnachisel-guarded
-  windowed-GC test, and a session journal.
+- **`scripts/nanobodies/codon_view.py`** — new. Codon-aligned view of the in-frame
+  `Coding_DNA`: each codon with the amino acid beneath it, a residue-number ruler,
+  wrapped into blocks. Writes three formats — monospaced **text**, colour-coded
+  **HTML**, and colour-coded **PDF** (via `fpdf2`, easiest to share) — amino acids
+  grouped by chemical class, and verifies every sequence translates back to its
+  `Protein` column. Flags `--style pipe|space`, `--codons-per-line`, `--no-pdf`.
+- **`scripts/nanobodies/rare_codon_scan.py`** — new. Flags E. coli rare codons
+  (AGA/AGG/CGA/CGG Arg, ATA Ile, CTA Leu, CCC Pro, GGA Gly; GGG as "watch") and
+  reports tandem runs (≥2 consecutive rare codons) per plate.
+- **`make_nanobody_plate.py` / `nanobody_common.py`** — production default
+  `--gc-max` changed from 75 to **72** (`RunConfig.gc_max = 0.72`).
+- **`pyproject.toml`** — `fpdf2>=2.7` added to the `viz` and `all` extras.
+- **Tests** — `tests/test_codon_view.py`, `tests/test_rare_codon_scan.py`.
+- **Docs** — `scripts/nanobodies/README.md` documents both inspection tools, the
+  three codon-view outputs, and the 72% default.
 
 ## Verification
 
-- Full test suite passes (`pytest`, **20 passed**), including the new
-  `test_windowed_gc_cap_with_flank_context`.
-- Regenerated the order at `--gc-max 75` and independently rechecked with
-  `gc_sliding_window.py`: worst 50 bp window **84% → 74%** across all 96
-  variants; translations preserved, flanks intact, coding regions BsaI-clean,
-  all pipeline self-checks pass. Visually confirmed the 5' peak is flattened in
-  the profile plot.
+- Full test suite passes (`pytest`, **35 passed**), including the new tool tests.
+- Rare-codon scan across the June 26 plate, the 74% run, and the new 72% run:
+  **0 rare codons and 0 tandem runs in all three** — the GC cap costs nothing on
+  codon quality (it sheds GC via common synonyms, never rare codons).
+- Regenerated the 72% order: worst 50 bp window **72.0%**; all 96 variants
+  translate cleanly; codon-view text/HTML/PDF render correctly (first PDF page
+  inspected visually).
+- Investigated the GC-dense glycine run at residues 8–10: under a 50 bp window
+  cap it stays the optimal `GGC-GGC-GGC`; tightening 74%→72% for Nb01 changed a
+  single neighbouring Ala codon (`GCG→GCA`), not the glycine run.
 
 ## Future work
 
-- The highest-frequency **fallback backend does not enforce windowed GC** (it
-  accepts the params but ignores them); `verify()`'s windowed check would fail a
-  fallback-backed run. Fine while production uses DNAChisel.
-- **Padding** is only globally bounded (0.30–0.70), not covered by the windowed
-  optimization; `verify()` still checks the whole final fragment, so a
-  pad/flank-junction breach would surface loudly.
+- The rare-codon set is the classic Rosetta-supplemented group; `GGG` is treated
+  as "watch" only. The set / thresholds could be made configurable if needed.
+- The codon-view PDF uses Latin-1 core fonts (fine for ASCII sequence data); a
+  Unicode TTF would be needed to render any non-Latin-1 metadata.

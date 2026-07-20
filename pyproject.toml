@@ -25,11 +25,12 @@ bio = [
     "python-codon-tables>=0.1.12",
     "plateo>=0.3.1",
 ]
-# PNG plate-map export (SVG export needs no dependencies):
-viz = ["matplotlib>=3.5"]
+# Inspection outputs: PNG plate-map / GC plots (matplotlib; SVG needs nothing)
+# and codon-view PDF export (fpdf2):
+viz = ["matplotlib>=3.5", "fpdf2>=2.7"]
 dev = ["pytest>=7"]
 all = ["dnachisel>=3.2", "biopython>=1.81", "python-codon-tables>=0.1.12",
-       "plateo>=0.3.1", "matplotlib>=3.5", "pytest>=7"]
+       "plateo>=0.3.1", "matplotlib>=3.5", "fpdf2>=2.7", "pytest>=7"]
 
 [tool.setuptools.packages.find]
 include = ["prosy*"]

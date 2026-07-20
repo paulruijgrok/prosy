@@ -47,7 +47,7 @@ class RunConfig:
     avoid_enzymes: list[str] = field(default_factory=lambda: ["BsaI"])
     min_length: int = 300
     gc_window: int | None = None          # bp; sliding-window GC cap width (None = off)
-    gc_max: float = 0.75                  # upper GC fraction per window
+    gc_max: float = 0.72                  # upper GC fraction per window
     gc_min: float = 0.0                   # lower GC fraction per window
     mutations_per_parent: int = 7
     new_id_start: int = 73
