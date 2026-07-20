@@ -1,62 +1,57 @@
-# ProSy: core package + nanobody plate script
+# Add sliding-window GC cap to nanobody DNA fragment design
 
-Initial commit of **ProSy**, a toolkit for turning protein sequences into
-synthesis-ready DNA, plus the first task script.
+## Summary
 
-## What's included
+The 260626 nanobody plate fragments had a 5' GC hot spot: a 50 bp sliding-window
+scan of the final (flanked) sequences peaked at **84% GC** near the flank/coding
+junction — a synthesis risk. The root cause was that the codon optimizer applied
+**no GC constraint at all** to the coding region (only the rarely-used padding was
+bounded 0.30–0.70).
 
-### `prosy/core/` — general, reusable toolkit
-Organism- and cloning-agnostic building blocks. Enzymes, codon tables, GC
-targets, flanks and assembly choices are all parameters.
+This PR adds a windowed GC cap to the codon-optimization path and, crucially,
+enforces it **across the flank/coding junction** rather than only within the CDS,
+by optimizing the coding region embedded in its fixed flank context.
 
-| Module | Purpose |
-|---|---|
-| `sequence` | Genetic code, translation, reverse-complement, point-mutation parse/apply, validation. |
-| `enzymes` | Restriction-enzyme registry (BsaI, BsmBI, BbsI, SapI, EcoRI, …) with both-strand patterns + Type IIS cut metadata. |
-| `constraints` | Declarative `ConstraintSet` → forbidden patterns + GC bounds. |
-| `codon` | Codon-usage tables and two interchangeable optimization backends. |
-| `optimize` | `optimize_cds()` — protein → synthesis-ready CDS. |
-| `cloning` | Flank/adapter application + minimum-length padding (input preserved verbatim). |
-| `optimize` | `optimize_cds()` and `build_fragment()` (optimize → flank → pad). |
-| `plate` | 96-/384-well coordinate helpers, column- or row-major fill. |
-| `layout` | Place groups (parent + N mutants) onto a plate; row/column packing, 96/384, alignment checks. |
-| `platemap` | Dependency-free SVG plate-map renderer; optional PNG via matplotlib/LibreOffice. |
-| `io` | Read/write CSV/TSV/XLSX, flexible column matching, vendor plate-sheet writer. |
+## Changes
 
-### Codon backends
-- **DNAChisel** (default when installed) reproduces the original
-  `codon_optimize.py`: reverse-translate → enforce translation → avoid
-  restriction sites → codon-optimize for a species.
-- **Highest-frequency fallback** (no dependencies) keeps the pipeline runnable
-  and testable without DNAChisel.
+- **`prosy/core/codon.py`** — `DnaChiselBackend.optimize` now embeds the CDS in
+  its fixed left/right flank context (flanks frozen via `AvoidChanges`;
+  `AvoidPattern`/`EnforceTranslation`/`CodonOptimize` scoped to the coding
+  location) and applies `EnforceGCContent(window=…)`; it returns just the CDS
+  slice. `gc_window`/`left_context`/`right_context` added to the `CodonBackend`
+  Protocol and the highest-frequency fallback (fallback accepts but does not
+  enforce windowing). Removed a pre-existing unused import.
+- **`prosy/core/constraints.py`** — new `gc_window` field on `ConstraintSet`.
+- **`prosy/core/optimize.py`** — `optimize_cds` and `build_fragment` thread
+  `gc_window` + flank context; `build_fragment` passes the flanks as fixed
+  context into `optimize_cds`.
+- **`scripts/nanobodies/nanobody_common.py`** — `RunConfig` gains
+  `gc_window`/`gc_max`/`gc_min`; `optimize_all` builds the windowed constraint;
+  `verify()` adds a `max_window_gc()` self-check that fails the run if any final
+  fragment breaches the cap.
+- **`scripts/nanobodies/make_nanobody_plate.py`** — new `--gc-window` (50),
+  `--gc-max` (75), `--gc-min` (0) flags; run summary prints the active cap.
+- **`scripts/nanobodies/gc_sliding_window.py`** — new standalone tool:
+  sliding-window GC over a mapping CSV → long-format CSV + overlay plot (mean
+  track, out-of-bounds flagging).
+- Docs (`README.md`, `scripts/nanobodies/README.md`), a new dnachisel-guarded
+  windowed-GC test, and a session journal.
 
-### `scripts/nanobodies/` — task scripts
-- `nanobody_common.py`: shared library (load parents, match mutations by
-  sequence, build variants, lay out, optimize, write, verify).
-- `make_nanobody_plate.py`: one general CLI. Each parent + its top-N mutations is
-  a group that fills a plate column or row; groups pack onto a 96- or 384-well
-  plate. Codon-optimizes for *E. coli* avoiding BsaI, appends Golden Gate flanks,
-  pads to a minimum length, and emits a vendor plate sheet, a design intermediate
-  and a full provenance mapping (all `--stamp`-prefixed). Self-verifies on every
-  run. Supports `--orientation row|column`, `--mutations-per-parent`,
-  configurable parent lists and `--plate-size 96|384`.
+## Verification
 
-## Tests
-- `tests/test_core.py` — genetic code, mutations, enzyme registry, fallback
-  optimizer (translation round-trip + BsaI-clean), padding, plate coordinates.
-- `tests/test_layout.py` — layout engine: column/row, 96/384, the 16×5 and 24×3
-  packings, overflow and straddle handling.
+- Full test suite passes (`pytest`, **20 passed**), including the new
+  `test_windowed_gc_cap_with_flank_context`.
+- Regenerated the order at `--gc-max 75` and independently rechecked with
+  `gc_sliding_window.py`: worst 50 bp window **84% → 74%** across all 96
+  variants; translations preserved, flanks intact, coding regions BsaI-clean,
+  all pipeline self-checks pass. Visually confirmed the 5' peak is flattened in
+  the profile plot.
 
-```bash
-python -m pytest tests/        # or: python tests/test_core.py
-```
+## Future work
 
-## Optional extras
-Core needs only `openpyxl`. Feature groups: `.[optimize]` (DNAChisel),
-`.[viz]` (matplotlib PNG maps), `.[bio]` (Biopython, python-codon-tables,
-Plateo), `.[all]`.
-
-## Notes
-- Project data (`Working folder/`) and the original reference script
-  (`Inspiration code/`) are intentionally git-ignored.
-- Requires Python ≥ 3.10. Runtime dep: `openpyxl`.
+- The highest-frequency **fallback backend does not enforce windowed GC** (it
+  accepts the params but ignores them); `verify()`'s windowed check would fail a
+  fallback-backed run. Fine while production uses DNAChisel.
+- **Padding** is only globally bounded (0.30–0.70), not covered by the windowed
+  optimization; `verify()` still checks the whole final fragment, so a
+  pad/flank-junction breach would surface loudly.
