@@ -8,6 +8,10 @@ Task scripts for nanobody DNA-fragment design.
 - **`make_nanobody_plate.py`** — one general CLI over that library. Each parent +
   its top-N mutations forms a group that fills a plate column or row; groups pack
   onto a 96- or 384-well plate.
+- **`gc_sliding_window.py`** — inspection tool: sliding-window GC over a mapping
+  CSV → long-format CSV + overlay plot (flags windows outside bounds).
+- **`codon_view.py`** — inspection tool: codon-aligned view of each variant's
+  coding DNA with the amino acid under each codon, as plain text + colour-coded HTML.
 
 ## make_nanobody_plate.py
 
@@ -21,7 +25,7 @@ Parents are matched to the TSVs by full protein sequence. Mutations are ranked b
 is codon-optimized (E. coli, BsaI-avoiding by default), flanked, and padded to a
 minimum length.
 
-By default the codon optimizer also holds the local GC content at or below 75%
+By default the codon optimizer also holds the local GC content at or below 72%
 over every 50 bp sliding window (`--gc-window`/`--gc-max`). The coding region is
 optimized *inside its fixed flank context*, so the cap holds across the
 flank/coding junction at the 5' end (a known GC hot spot), not just within the
@@ -55,7 +59,7 @@ Parents keep their own ID. Plate `Name` = `"<NbID> <NbID_parent>"` for mutants.
 | `--avoid-enzymes` | `BsaI` | Enzyme sites to avoid in coding regions. |
 | `--min-length` | `300` | Minimum fragment length (bp). |
 | `--gc-window` | `50` | Sliding-window width (bp) for the local GC cap; `0` disables. |
-| `--gc-max` | `75` | Max GC%% allowed in any `--gc-window` (a 50 bp window resolves this to ≤74%). |
+| `--gc-max` | `72` | Max GC%% allowed in any `--gc-window` (over a 50 bp window, exactly ≤36 GC bases). |
 | `--gc-min` | `0` | Min GC%% required in any `--gc-window` (`0` = no floor). |
 | `--new-id-start` / `--new-id-prefix` | `73` / `Nb` | New mutant ID series. |
 | `--backend` | `auto` | `auto` / `dnachisel` / `highest_frequency`. |
@@ -92,3 +96,43 @@ python make_nanobody_plate.py --plate-size 384 --stamp 384plate \
 The script self-verifies every run (unique wells, translation round-trip,
 clean coding regions, intact flanks, contiguous ID series, min length) and exits
 non-zero if any check fails.
+
+## Inspection tools
+
+Both read a `<stamp>_nanobody_mapping.csv` and write outputs next to it.
+
+### gc_sliding_window.py
+
+Sliding-window GC content across each variant's DNA. Writes a long-format CSV
+(`id, well, window_start, window_end, gc`) and an overlay plot; prints a summary
+flagging any variant with a window outside `[--low, --high]`% GC.
+
+```bash
+python gc_sliding_window.py --input <mapping.csv> --window 50 \
+  --out gc_windows.csv --plot gc_profile.png        # --column Coding_DNA to skip flanks
+```
+
+### codon_view.py
+
+Codon-aligned view of the in-frame coding sequence (`Coding_DNA`) for manual
+reading: each codon with the amino acid it encodes printed directly beneath it,
+plus a residue-number ruler, wrapped into blocks. Writes **three** files — a
+monospaced plain-text file, a colour-coded HTML file, and a colour-coded PDF
+(easiest to share) — with amino acids grouped by chemical class, and verifies
+every sequence translates back to its `Protein` column.
+
+```bash
+python codon_view.py --input <mapping.csv>     # -> <mapping>_codons.txt + .html + .pdf
+```
+
+The PDF needs `fpdf2` (`pip install fpdf2`, or `pip install -e ".[viz]"`); if it's
+not installed the PDF is skipped with a note and the text/HTML are still written.
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--seq-column` | `Coding_DNA` | In-frame coding-DNA column to render. |
+| `--codons-per-line` | `20` | Codons per wrapped block. |
+| `--style` | `pipe` | Text layout: `pipe` (`\|CAG\|GTG\|`) or `space` (`CAG GTG`). |
+| `--out-txt` / `--out-html` / `--out-pdf` | next to input | Override output paths. |
+| `--no-pdf` | off | Skip the PDF (text + HTML only). |
+| `--limit` | `0` | Render only the first N variants (0 = all). |

@@ -82,9 +82,9 @@ def main() -> None:
     p.add_argument("--min-length", type=int, default=300)
     p.add_argument("--gc-window", type=int, default=50, metavar="BP",
                    help="Sliding-window width (bp) for the local GC cap; 0 disables (default: 50).")
-    p.add_argument("--gc-max", type=float, default=75.0, metavar="PCT",
-                   help="Max GC%% allowed in any --gc-window (default: 75; "
-                        "a 50 bp window resolves this to <=74%% in practice).")
+    p.add_argument("--gc-max", type=float, default=72.0, metavar="PCT",
+                   help="Max GC%% allowed in any --gc-window (default: 72; "
+                        "over a 50 bp window this is exactly <=36 GC bases).")
     p.add_argument("--gc-min", type=float, default=0.0, metavar="PCT",
                    help="Min GC%% required in any --gc-window (default: 0 = no floor).")
     p.add_argument("--new-id-start", type=int, default=73)
