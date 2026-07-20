@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from prosy.core.plate import PLATE_96, PLATE_384, PlateFormat, resolve_plate_format
+from prosy.core.plate import PLATE_96, PlateFormat, resolve_plate_format
 
 ORIENTATIONS = ("column", "row")
 
