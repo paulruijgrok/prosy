@@ -8,6 +8,9 @@ Task scripts for nanobody DNA-fragment design.
 - **`make_nanobody_plate.py`** — one general CLI over that library. Each parent +
   its top-N mutations forms a group that fills a plate column or row; groups pack
   onto a 96- or 384-well plate.
+- **`make_db_rows.py`** — post-processing tool: turn a run's mapping CSV into an
+  xlsx whose columns mirror the `Nanobodies` sheet of the lab spreadsheet, ready
+  to paste under the existing rows.
 - **`gc_sliding_window.py`** — inspection tool: sliding-window GC over a mapping
   CSV → long-format CSV + overlay plot (flags windows outside bounds).
 - **`codon_view.py`** — inspection tool: codon-aligned view of each variant's
@@ -96,6 +99,55 @@ python make_nanobody_plate.py --plate-size 384 --stamp 384plate \
 The script self-verifies every run (unique wells, translation round-trip,
 clean coding regions, intact flanks, contiguous ID series, min length) and exits
 non-zero if any check fails.
+
+## make_db_rows.py
+
+Turns a finished run into rows for the lab database. Reads the run's
+`<stamp>_nanobody_mapping.csv` (which carries the new `NbID` series) plus the
+`Nanobodies` sheet of `Malaria DX plasmids.xlsx`, and writes
+`<stamp>_nanobody_db_rows.xlsx`: one header row followed by one row per variant,
+in the sheet's own column order, so the data rows paste straight underneath the
+existing ones.
+
+```bash
+python make_db_rows.py --stamp 260626_row \
+    --data-dir "../../Working folder/260720_NanobodyMuts_row_gc72"
+```
+
+What lands in each column:
+
+- **DB ID** — continues the sheet's series (highest existing + 1) unless
+  `--db-id-start` says otherwise.
+- **Nanobody ID (Short)** — the new ID from the run (`Nb73`, `Nb74`, …).
+- **Long**, **Length (AA)** — left **empty on purpose**: the sheet computes these
+  itself, and pasting values would overwrite the formulas.
+- **Target / Target spec / Source / Set name** — inherited from the parent row.
+- **AA Sequence** — the variant's protein from the run.
+- **CDR 1/2/3** — see `--cdr-mode` below.
+- **Alias** — parent alias extended with the mutation (`P4102_95_N96A`); empty if
+  the parent has no alias.
+- **Parent** — the parent's `NbID`.
+- **Notes** — parent, mutation, design score, plate stamp and well.
+- Everything else (**Old Alias**, **Linked plasmids**, **Set rank**,
+  **On target affinity**) is left blank to fill in by hand.
+
+The run prints the worksheet row to paste at, and warns if any ID it is about to
+emit already exists in the sheet. It exits non-zero if a parent named in the
+mapping is missing from the sheet.
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--data-dir` / `--stamp` | `Working folder/260626_NanobodyMuts` / `260626` | Locate the run, as in `make_nanobody_plate.py`. |
+| `--mapping` / `--sheet-xlsx` / `--out` | derived from `--data-dir`+`--stamp` | Override individual paths. |
+| `--sheet` | `Nanobodies` | Worksheet whose columns to mirror. |
+| `--include` | `mutants` | `mutants` / `parents` / `all` (parents already exist in the sheet). |
+| `--cdr-mode` | `offsets` | `offsets` = re-extract each CDR at the parent's offsets, so a mutation inside a CDR is reflected; `inherit` = copy the parent's CDRs verbatim; `blank` = leave empty. |
+| `--db-id-start` | auto | First DB ID; default is the sheet's highest + 1. |
+| `--id-col` / `--db-id-col` | `Nanobody ID` / `DB ID` | Column names, if the sheet is renamed. |
+
+`offsets` mode assumes point mutations (parent and variant the same length). If a
+parent CDR is missing from, or ambiguous in, the parent sequence, that CDR is
+copied verbatim and the run prints a warning.
 
 ## Inspection tools
 
