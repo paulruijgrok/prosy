@@ -6,8 +6,8 @@ all passed in as parameters. Task scripts compose these pieces.
 """
 
 from prosy.core import (
-    sequence, enzymes, constraints, codon, optimize, cloning, plate, layout,
-    platemap, io,
+    sequence, enzymes, constraints, codon, optimize, cloning, goldengate,
+    scan, antibody, library, plate, layout, platemap, io,
 )
 
 __all__ = [
@@ -17,6 +17,10 @@ __all__ = [
     "codon",
     "optimize",
     "cloning",
+    "goldengate",
+    "scan",
+    "antibody",
+    "library",
     "plate",
     "layout",
     "platemap",
