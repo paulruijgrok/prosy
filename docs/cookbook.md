@@ -1,16 +1,27 @@
 # Cookbook
 
-Copy-pasteable commands for every pipeline in the repo. Every command here has
-been run; paths are real paths in this repo.
+Copy-pasteable commands for every pipeline. Every command here has been run,
+and `tests/test_cookbook.py` checks that the flags still exist — see
+[Keeping this page honest](#10-keeping-this-page-honest) at the bottom.
 
 Run everything from the repo root, in the `DataAnalysis` conda env (it has
-DNAChisel, which is required for the synthesis constraints):
+DNAChisel, which the synthesis constraints require):
 
+<!-- cookbook:skip -->
 ```bash
 cd ~/Documents/Claude/Projects/ProSy
 conda activate DataAnalysis
 python -m pytest tests/ -q          # sanity check: expect all green
 ```
+
+**Two kinds of input path appear below.**
+
+- `data/…` is shipped with the repo, so those commands run from a fresh clone.
+  `data/examples/nb01.fa` is a sample VHH, `data/plasmids/FP01.fa` a sample
+  destination vector.
+- `Working folder/…` is **lab data: gitignored, not in the repo**. Those
+  commands are the real historical invocations, kept as worked examples — swap
+  in your own paths, or skip them on a fresh clone.
 
 All DNA-producing scripts default to `--synthesis-profile vendor-standard` and
 gate the run on it — see [the README](../README.md#synthesis-manufacturability--read-before-ordering-dna).
@@ -25,20 +36,19 @@ Produces `<stamp>_variants.csv`. No DNA, no destination vector needed.
 ```bash
 # Alanine scan of every residue
 python scripts/scan/mutational_scan.py \
-    --protein-file "Working folder/260917_designs_enzyme/designs01.fasta" \
-    --name designs01 --scan alanine \
+    --protein-file data/examples/nb01.fa --name Nb01 --scan alanine \
     --out-dir /tmp/scan --stamp ala
 
 # Site-saturation (19 variants per position) over two loops
 python scripts/scan/mutational_scan.py \
-    --protein-file "Working folder/260917_designs_enzyme/designs01.fasta" \
-    --name designs01 --scan saturation --positions 100-110,150-155 \
+    --protein-file data/examples/nb01.fa --name Nb01 --scan saturation \
+    --positions 26-33,96-110 \
     --out-dir /tmp/scan --stamp ssm
 
 # Reduced alphabet: 5 residues spanning charge/hydrophobicity/size
 python scripts/scan/mutational_scan.py \
-    --protein-file "Working folder/260917_designs_enzyme/designs01.fasta" \
-    --name designs01 --scan reduced --alphabet adklw --positions 100-120 \
+    --protein-file data/examples/nb01.fa --name Nb01 --scan reduced \
+    --alphabet adklw --positions 96-110 \
     --out-dir /tmp/scan --stamp red
 ```
 
@@ -47,7 +57,22 @@ Positions default to the whole sequence; `--exclude` subtracts from the set.
 
 ## 2. Scans → orderable DNA
 
-Add `--fragments` and a destination. Adapters are derived from the plasmid.
+Add `--fragments` and a destination. Adapters are derived from the plasmid,
+which is resolved by bare name from `data/plasmids/`.
+
+```bash
+python scripts/scan/mutational_scan.py \
+    --protein-file data/examples/nb01.fa --name Nb01 \
+    --scan alanine --positions 96-110 \
+    --fragments --destination FP01 \
+    --out-dir /tmp/scan --stamp ala_dna
+```
+
+By default the assembly check asks only that the design appears *somewhere* in
+the product ORF — right for FP01, whose ORF is the whole 637 aa
+`M–nanobody–HaloTag–FLAG–SNAP` fusion. `--expect-prefix`/`--expect-suffix`
+switch it to an exact match of the entire ORF, which is what you want where the
+product is short and a frame slip would silently drop a tag:
 
 ```bash
 python scripts/scan/mutational_scan.py \
@@ -57,7 +82,7 @@ python scripts/scan/mutational_scan.py \
     --destination "Working folder/260917_designs_enzyme/gg002.txt" \
     --flank-5 TGTATCGGTCTCGAGGA --flank-3 GGTTCCGGAGACCTCTAGT \
     --expect-prefix MSG --expect-suffix GSHHHHHH \
-    --out-dir /tmp/scan --stamp ala_dna
+    --out-dir /tmp/scan --stamp ala_dna_gg002
 ```
 
 > **The `--flank-*` overrides are not optional for gg002.** Its auto-derived 3'
@@ -267,3 +292,28 @@ in-silico assembly if you only want sequences; `-1` assembles all of them.
 | `Expected exactly one …-free backbone fragment` | The plasmid's Type IIS sites don't face outward from a stuffer, or there are more than two. |
 | Windowed GC breaches with no explanation | The dependency-free fallback backend is running. Install `.[optimize]`. |
 | `Parents not found in sheet` | `--data-dir` lacks `plasmid_database.xlsx`, or the IDs aren't in the `Nanobodies` sheet. |
+| `No such file or directory: 'Working folder/…'` | That's lab data, gitignored and absent from a fresh clone. Use your own paths, or the `data/` examples. |
+
+## 10. Keeping this page honest
+
+Documented commands rot: a flag gets renamed and the docs keep the old name
+until someone pastes it and hits an argparse error. That has already happened
+here once.
+
+`tests/test_cookbook.py` reads this file and checks it, in two tiers:
+
+<!-- cookbook:skip -->
+```bash
+# Lint — runs with the normal suite, about a second. Parses every block,
+# checks the scripts exist, checks every --flag is actually accepted by the
+# script it is passed to, and compiles the Python blocks.
+python -m pytest tests/test_cookbook.py -q
+
+# Smoke — opt-in, minutes. Actually executes every bash block, in a sandbox
+# copy of the repo so nothing writes into the real Working folder.
+PROSY_RUN_COOKBOOK=1 python -m pytest tests/test_cookbook.py -q
+```
+
+Run the smoke tier before committing a change to this page or to any CLI's
+arguments. A block that must never be executed (the install block) is marked
+with `<!-- cookbook:skip -->` on the line above its fence.

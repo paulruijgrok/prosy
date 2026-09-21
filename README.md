@@ -11,7 +11,17 @@ ProSy is split in two:
   codon tables, GC targets, flanks and assembly choices are all parameters, so
   the same core serves any host or downstream cloning strategy.
 - **`scripts/`** — task-specific scripts that wire the core together for concrete
-  jobs encountered in daily practice (`scripts/scan/`, `scripts/nanobodies/`).
+  jobs encountered in daily practice (`scripts/scan/`, `scripts/nanobodies/`,
+  `scripts/designs/`).
+
+## Documentation
+
+| Page | What's in it |
+|---|---|
+| **[docs/cookbook.md](docs/cookbook.md)** | **Start here to run something.** Tested commands for every pipeline, the inspection tools, the Python API, recipes and a troubleshooting table. |
+| [docs/mutational_scans.md](docs/mutational_scans.md) | How the scans and CDR annotation work; position selection, alphabets, boundary schemes. |
+| [docs/golden_gate.md](docs/golden_gate.md) | Type IIS cut geometry, adapter design, assembly simulation, and everything the pipeline verifies. |
+| [Synthesis manufacturability](#synthesis-manufacturability--read-before-ordering-dna) (below) | **Read before ordering DNA.** Why plain codon optimization is not orderable. |
 
 ## Quick start
 
@@ -37,9 +47,8 @@ python scripts/scan/mutational_scan.py --protein-file myprotein.fa --scan satura
     --positions 31-35,50-65 --fragments --destination FP01
 ```
 
-**→ [docs/cookbook.md](docs/cookbook.md) has tested commands for every pipeline**
-— scans, nanobody plates, design-set plates, the inspection tools, the Python
-API, and a troubleshooting table.
+Every other pipeline, with tested commands, is in
+**[docs/cookbook.md](docs/cookbook.md)**.
 
 ## Installation
 
