@@ -12,6 +12,7 @@ sys.path.insert(0, str(_ROOT))
 
 from prosy.core import codon as codon_mod  # noqa: E402
 from prosy.core import goldengate as gg  # noqa: E402
+from prosy.core import synthesis  # noqa: E402
 from prosy.core.library import (  # noqa: E402
     LibraryConfig,
     build_degenerate_library,
@@ -43,11 +44,12 @@ def ends(fp01):
 
 @pytest.fixture(scope="module")
 def cfg(ends):
-    # No windowed GC cap here: the dependency-free fallback backend does not
-    # solve windowed GC (see test_windowed_gc_cap_needs_dnachisel below), and
-    # the test suite must run without dnachisel installed.
+    # No windowed GC cap and no synthesis profile here: the dependency-free
+    # fallback backend solves neither (see the two "needs_dnachisel" tests
+    # below), and the suite must run without dnachisel installed.
     return LibraryConfig(flanks=gg.design_insert_flanks(ends, "BsaI"), enzyme="BsaI",
-                         min_length=300)
+                         min_length=300, synthesis_profile="none",
+                         check_synthesis=False)
 
 
 @pytest.fixture(scope="module")
@@ -131,6 +133,40 @@ def test_window_gc_range_matches_a_naive_computation():
              for i in range(len(dna) - window + 1)]
     assert window_gc_range(dna, window) == pytest.approx((min(naive), max(naive)))
     assert window_gc_range("GGCC", 10) == (1.0, 1.0)
+
+
+def test_the_default_config_gates_on_manufacturability():
+    cfg = LibraryConfig(flanks=gg.Flanks("", ""))
+    assert cfg.synthesis_profile == "vendor-standard" and cfg.check_synthesis
+    # ...and the profile is what supplies the repeat constraint.
+    assert cfg.coding_constraints().unique_kmer_size == 8
+
+
+def test_fallback_backend_ignores_the_kmer_uniqueness_constraint(ends):
+    """The fallback accepts the profile but cannot enforce it.
+
+    A profile asking for unique 8-mers still leaves plenty of repeats when the
+    fallback builds the sequence. Whether that breaches a vendor's limit
+    depends on length (a 121 aa nanobody stays under it; the 333 aa designs did
+    not), so the gate - not the request - is what decides.
+    """
+    cfg = LibraryConfig(flanks=gg.design_insert_flanks(ends, "BsaI"),
+                        enzyme="BsaI", min_length=300)
+    assert cfg.coding_constraints().unique_kmer_size == 8
+    built = build_library(alanine_scan(NB01, [96], parent_name="Nb01"), cfg,
+                          backend="highest_frequency")
+    report = synthesis.check(built[0].dna_final, cfg.profile.spec)
+    assert report.repeat_fraction > 0.15          # constraint plainly not applied
+
+
+@pytest.mark.skipif(not codon_mod.dnachisel_available(), reason="dnachisel not installed")
+def test_dnachisel_with_the_profile_passes_the_gate(ends):
+    cfg = LibraryConfig(flanks=gg.design_insert_flanks(ends, "BsaI"), enzyme="BsaI",
+                        min_length=300)          # vendor-standard by default
+    built = build_library(alanine_scan(NB01, [96], parent_name="Nb01"), cfg,
+                          backend="dnachisel")
+    assert verify_library(built, cfg) == []
+    assert all(m.synthesis.repeat_fraction < 0.20 for m in built)
 
 
 @pytest.mark.skipif(not codon_mod.dnachisel_available(), reason="dnachisel not installed")

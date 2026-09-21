@@ -45,7 +45,7 @@ from prosy.core import synthesis  # noqa: E402
 from prosy.core.cloning import Flanks  # noqa: E402
 from prosy.core.constraints import ConstraintSet  # noqa: E402
 from prosy.core.library import orf_protein, window_gc_range  # noqa: E402
-from prosy.core.optimize import build_fragment  # noqa: E402
+from prosy.core.optimize import build_fragment_with_ladder  # noqa: E402
 from prosy.core.sequence import gc_content, translate, validate_protein  # noqa: E402
 
 MAPPING_COLUMNS = [
@@ -169,14 +169,24 @@ def main() -> int:
                      help="DNAChisel codon-optimization objective.")
     dna.add_argument("--avoid", nargs="*", default=[], metavar="ENZYME")
     dna.add_argument("--min-length", type=int, default=300)
-    dna.add_argument("--gc-window", type=int, default=50,
-                     help="Sliding-window width (bp) for the GC cap; 0 disables.")
+    dna.add_argument("--gc-window", type=int, default=None,
+                     help="Sliding-window width (bp) for the GC cap. Overrides the "
+                          "profile's band of the same width; omit to use the profile.")
     dna.add_argument("--gc-max", type=float, default=0.72)
     dna.add_argument("--gc-min", type=float, default=0.0)
     dna.add_argument("--backend", default=None)
     dna.add_argument("--seed", type=int, default=0)
 
     syn = p.add_argument_group("synthesis manufacturability")
+    syn.add_argument("--synthesis-profile", default="vendor-standard",
+                     choices=sorted(synthesis.PROFILES),
+                     help="Manufacturability defaults and the acceptance spec the "
+                          "run is gated on. Every flag below overrides it. Plain "
+                          "codon optimization ('none') leaves ~70%% repeated-8-mer "
+                          "coverage, which DNA vendors reject.")
+    syn.add_argument("--no-check-synthesis", action="store_true",
+                     help="Build under the profile but do not fail on its "
+                          "acceptance spec. For inspection, not for ordering.")
     syn.add_argument("--unique-kmer", type=int, default=None, metavar="K",
                      help="Forbid any repeated K-mer (both strands). This is the "
                           "cure for a vendor's repeat-complexity rejection: plain "
@@ -206,8 +216,9 @@ def main() -> int:
     syn.add_argument("--max-homopolymer-a", type=int, default=None)
     syn.add_argument("--max-homopolymer-g", type=int, default=None)
     syn.add_argument("--check-synthesis", action="store_true",
-                     help="Measure every fragment against the vendor rule set in "
-                          "prosy.core.synthesis and fail the run on any breach.")
+                     help="Deprecated: the gate is on by default. Kept so existing "
+                          "command lines keep working; use --no-check-synthesis to "
+                          "turn it off.")
     syn.add_argument("--max-repeat-fraction", type=float, default=0.40)
     syn.add_argument("--max-gc-20", type=float, default=0.90,
                      help="Vendor limit for a 20 bp GC window (the check, not the "
@@ -271,14 +282,36 @@ def main() -> int:
 
     # ---- optimize --------------------------------------------------------- #
     avoid = [args.enzyme, *[e for e in args.avoid if e != args.enzyme]]
-    extra_gc: list[tuple[int | None, float, float]] = []
+
+    # The profile supplies the manufacturability defaults; any explicit flag
+    # overrides it. Same interface as the other plate/scan scripts, so no run
+    # silently falls back to unconstrained codon optimization.
+    prof = synthesis.get_profile(args.synthesis_profile)
+    unique_kmer = (args.unique_kmer if args.unique_kmer is not None
+                   else prof.unique_kmer_size)
+    min_freq = (args.min_codon_frequency if args.min_codon_frequency is not None
+                else prof.min_codon_frequency)
+
+    # An explicitly given window replaces the profile's band of that width
+    # rather than stacking on top of it.
+    overridden = {args.gc_window_2, args.gc_window or None}
+    extra_gc: list[tuple[int | None, float, float]] = [
+        band for band in prof.gc_bands if band[0] not in overridden]
     if args.gc_window_2:
         extra_gc.append((args.gc_window_2, args.gc_window_2_min, args.gc_window_2_max))
     if args.gc_global_max:
         extra_gc.append((None, args.gc_global_min, args.gc_global_max))
-    homo = {b: v for b, v in (("A", args.max_homopolymer_a), ("T", args.max_homopolymer_a),
-                              ("G", args.max_homopolymer_g), ("C", args.max_homopolymer_g))
-            if v} or None
+    elif prof.gc_global:
+        extra_gc.append((None, prof.gc_global[0], prof.gc_global[1]))
+
+    explicit_homo = {b: v for b, v in
+                     (("A", args.max_homopolymer_a), ("T", args.max_homopolymer_a),
+                      ("G", args.max_homopolymer_g), ("C", args.max_homopolymer_g)) if v}
+    homo = explicit_homo or prof.max_homopolymer_by_base or None
+    print(f"synthesis profile: {prof.name}, gate "
+          + ("off (NOT order-ready)" if args.no_check_synthesis else "on")
+          + (f", unique {unique_kmer}-mers, codon freq >= {min_freq}"
+             if unique_kmer else ""))
 
     def constraints_for(kmer: int | None, soft: int | None,
                         min_freq: float | None) -> ConstraintSet:
@@ -298,34 +331,25 @@ def main() -> int:
     # synonymous changes alone - a protein carrying a repeated peptide motif
     # forces a repeated k-mer whatever the codons - so fall back to a larger k
     # before giving up, and record which step each design needed.
-    ladder = build_ladder(args)
+    ladder = build_ladder(unique_kmer, min_freq, args.kmer_ladder)
     pad_constraints = ConstraintSet(avoid_enzymes=avoid, max_homopolymer=4,
                                     forbid_low_complexity=True, gc_bounds=(0.30, 0.70))
     backend = codon_mod.get_backend(args.backend, seed=args.seed)
     print(f"\noptimizing {len(designs)} sequences with the {backend.name} backend"
           + (f", ladder {ladder}" if len(ladder) > 1 else "") + "...")
+    attempts = [(constraints_for(k, s, f), describe_step(k, s, f)) for k, s, f in ladder]
     for i, d in enumerate(designs):
-        last: Exception | None = None
-        for step, (kmer, soft, min_freq) in enumerate(ladder):
-            try:
-                frag = build_fragment(
-                    d["protein"], species=args.species,
-                    constraints=constraints_for(kmer, soft, min_freq),
-                    flanks=flanks, min_length=args.min_length,
-                    pad_constraints=pad_constraints, backend=backend,
-                    seed=args.seed + i, codon_method=args.codon_method,
-                )
-            except Exception as exc:  # noqa: BLE001 - solver reports infeasibility
-                last = exc
-                continue
-            d["coding"], d["final"] = frag.coding, frag.final
-            d["ladder_step"] = describe_step(kmer, soft, min_freq)
-            d["relaxed"] = step > 0
-            break
-        else:
-            raise SystemExit(
-                f"{d['name']}: no ladder step satisfied the constraints. "
-                f"Last solver error: {last}")
+        try:
+            frag, step, relaxed = build_fragment_with_ladder(
+                d["protein"], attempts, species=args.species,
+                flanks=flanks, min_length=args.min_length,
+                pad_constraints=pad_constraints, backend=backend,
+                seed=args.seed + i, codon_method=args.codon_method,
+            )
+        except RuntimeError as exc:
+            raise SystemExit(f"{d['name']}: {exc}") from exc
+        d["coding"], d["final"] = frag.coding, frag.final
+        d["ladder_step"], d["relaxed"] = step, relaxed
         if (i + 1) % 10 == 0:
             print(f"  {i + 1}/{len(designs)}", flush=True)
 
@@ -369,7 +393,7 @@ def verify(designs, args, ends, destination, flanks, avoid) -> list[str]:
         gc_windows=((20, 0.0, args.max_gc_20),),
         gc_bounds=(args.check_gc_min, args.check_gc_max),
     )
-    if args.check_synthesis:
+    if not args.no_check_synthesis:
         print(f"checking manufacturability: repeats <{args.max_repeat_fraction * 100:.0f}%, "
               f"20 bp GC <{args.max_gc_20 * 100:.0f}%, overall GC "
               f"{args.check_gc_min * 100:.0f}-{args.check_gc_max * 100:.0f}%...")
@@ -409,7 +433,7 @@ def verify(designs, args, ends, destination, flanks, avoid) -> list[str]:
             problems.append(f"{tag}: duplicate well {d['well']}.")
         seen.add(d["well"])
 
-        if args.check_synthesis:
+        if not args.no_check_synthesis:
             report = synthesis.check(final, spec)
             d["synthesis"] = report
             problems.extend(f"{tag}: {m}" for m in report.problems)
@@ -531,7 +555,9 @@ def describe_step(kmer: int | None, soft: int | None, min_freq: float | None) ->
     return ",".join(bits) or "none"
 
 
-def build_ladder(args: argparse.Namespace) -> list[tuple[int | None, int | None, float | None]]:
+def build_ladder(k: int | None, freq: float | None,
+                 ks: list[int] | None = None
+                 ) -> list[tuple[int | None, int | None, float | None]]:
     """``(hard k, soft k, min_codon_frequency)`` steps to try, in order.
 
     Hard k-mer uniqueness is preferred because it guarantees zero repeats, but
@@ -541,10 +567,9 @@ def build_ladder(args: argparse.Namespace) -> list[tuple[int | None, int | None,
     final step drops the hard constraint entirely. Whichever step a design
     lands on, prosy.core.synthesis.check() is still the gate on the result.
     """
-    k, freq = args.unique_kmer, args.min_codon_frequency
     if not k:
         return [(None, None, freq)]
-    ks = args.kmer_ladder or [k, k + 1, k + 2]
+    ks = ks or [k, k + 1, k + 2]
     ladder: list[tuple[int | None, int | None, float | None]] = [(ks[0], None, freq)]
     ladder += [(bigger, k, freq) for bigger in ks[1:]]
     ladder.append((None, k, freq))          # soft-only: never infeasible

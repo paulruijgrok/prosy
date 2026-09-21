@@ -213,3 +213,106 @@ def check(seq: str, spec: SynthesisSpec = DEFAULT_SPEC) -> SynthesisReport:
         repeat_window_fraction=win_frac, gc_window_extremes=extremes,
         homopolymers=homo, problems=problems,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Design-time profiles                                                         #
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class SynthesisProfile:
+    """Design-time constraints paired with the acceptance spec they target.
+
+    A profile exists so the settings that make a sequence orderable are a
+    *default*, not a long command line somebody has to remember. Plain
+    ``use_best_codon`` optimization reliably produces ~70% repeat coverage and
+    60%+ GC, both of which vendors reject; anything ordered should be built
+    under a profile and then measured against ``profile.spec``.
+    """
+
+    name: str
+    description: str
+    spec: SynthesisSpec
+    unique_kmer_size: int | None = None
+    min_codon_frequency: float | None = None
+    gc_global: tuple[float, float] | None = None
+    gc_bands: tuple[tuple[int, float, float], ...] = ()
+    max_homopolymer_by_base: dict[str, int] | None = None
+    codon_method: str = "use_best_codon"
+    kmer_ladder: tuple[int, ...] = ()
+
+    def constraint_ladder(self, avoid_enzymes: list[str]):
+        """Successive :class:`~prosy.core.constraints.ConstraintSet` attempts.
+
+        K-mer uniqueness is not always satisfiable with synonymous changes
+        alone: a protein carrying a repeated peptide motif forces a repeated
+        k-mer whatever the codons. Later steps raise the hard k while keeping
+        the original k as a *soft* objective - which is what actually drives
+        repeat coverage down - and the final step drops the hard constraint so
+        it can never be infeasible. Whichever step a sequence lands on,
+        :func:`check` against ``self.spec`` is still the gate.
+        """
+        from prosy.core.constraints import ConstraintSet
+
+        bands = list(self.gc_bands)
+        if self.gc_global is not None:
+            bands.append((None, self.gc_global[0], self.gc_global[1]))
+
+        def make(hard: int | None, soft: int | None) -> ConstraintSet:
+            return ConstraintSet(
+                avoid_enzymes=list(avoid_enzymes),
+                gc_windows=bands,
+                max_homopolymer_by_base=(dict(self.max_homopolymer_by_base)
+                                         if self.max_homopolymer_by_base else None),
+                unique_kmer_size=hard,
+                soft_unique_kmer_size=soft,
+                min_codon_frequency=self.min_codon_frequency,
+            )
+
+        k = self.unique_kmer_size
+        if not k:
+            return [(make(None, None), "none")]
+        ks = list(self.kmer_ladder) or [k, k + 1, k + 2]
+        steps = [(make(ks[0], None), f"k={ks[0]}")]
+        steps += [(make(bigger, k), f"k={bigger},soft_k={k}") for bigger in ks[1:]]
+        steps.append((make(None, k), f"soft_k={k}"))
+        return steps
+
+
+#: Thresholds and design settings that produced an accepted order (the 260921
+#: designs plate: 0/84 flagged, repeats <8%, overall GC 55.8%). The GC cap is
+#: deliberately below the vendor's 58% rule - DNAChisel satisfies a cap by
+#: sitting against it, so targeting the rule itself leaves no margin.
+VENDOR_STANDARD = SynthesisProfile(
+    name="vendor-standard",
+    description="Repeat, GC and rare-codon limits for a standard DNA vendor.",
+    spec=SynthesisSpec(max_repeat_fraction=0.40, gc_windows=((20, 0.0, 0.90),),
+                       gc_bounds=(0.40, 0.58)),
+    unique_kmer_size=8,
+    min_codon_frequency=0.10,
+    gc_global=(0.45, 0.56),
+    gc_bands=((50, 0.30, 0.68), (20, 0.25, 0.85)),
+    max_homopolymer_by_base={"A": 8, "T": 8, "G": 5, "C": 5},
+)
+
+#: No manufacturability constraints. Reproduces pre-2026-09 behaviour; leaves
+#: sequences at roughly 70% repeat coverage, which vendors reject.
+UNCONSTRAINED = SynthesisProfile(
+    name="none",
+    description="No repeat/GC manufacturability constraints (legacy behaviour).",
+    spec=DEFAULT_SPEC,
+)
+
+PROFILES: dict[str, SynthesisProfile] = {
+    p.name: p for p in (VENDOR_STANDARD, UNCONSTRAINED)
+}
+
+
+def get_profile(name: str) -> SynthesisProfile:
+    try:
+        return PROFILES[name]
+    except KeyError as exc:
+        raise KeyError(
+            f"Unknown synthesis profile {name!r}. Known: {sorted(PROFILES)}"
+        ) from exc

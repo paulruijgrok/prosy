@@ -16,9 +16,10 @@ from pathlib import Path
 from prosy.core import io
 from prosy.core import layout as layout_mod
 from prosy.core import platemap as platemap_mod
+from prosy.core import synthesis as synthesis_mod
 from prosy.core.cloning import Flanks
 from prosy.core.constraints import ConstraintSet
-from prosy.core.optimize import build_fragment
+from prosy.core.optimize import build_fragment_with_ladder
 from prosy.core.sequence import (
     PointMutation,
     apply_mutation,
@@ -49,6 +50,12 @@ class RunConfig:
     gc_window: int | None = None          # bp; sliding-window GC cap width (None = off)
     gc_max: float = 0.72                  # upper GC fraction per window
     gc_min: float = 0.0                   # lower GC fraction per window
+    # Manufacturability. Plain codon optimization reuses the same best codon
+    # everywhere and lands around 70% repeated-8-mer coverage, which DNA
+    # vendors reject; a profile constrains that at design time and its spec
+    # gates the finished fragments. See prosy.core.synthesis.
+    synthesis_profile: str = "vendor-standard"
+    check_synthesis: bool = True
     mutations_per_parent: int = 7
     new_id_start: int = 73
     new_id_prefix: str = "Nb"
@@ -75,6 +82,9 @@ class Variant:
     well: str = ""
     dna_coding: str = ""
     dna_final: str = ""
+    ladder_step: str = ""
+    relaxed: bool = False
+    synthesis: object | None = None     # SynthesisReport, once verified
 
     @property
     def plate_name(self) -> str:
@@ -204,24 +214,38 @@ def assign_wells(variants: list[Variant], parent_order: list[str], cfg: RunConfi
 # --------------------------------------------------------------------------- #
 
 
+def build_ladder(cfg: RunConfig) -> list:
+    """Constraint attempts for one run: the profile's ladder, plus the run's
+    own windowed GC cap (kept for backwards compatibility with --gc-window)."""
+    profile = synthesis_mod.get_profile(cfg.synthesis_profile)
+    ladder = profile.constraint_ladder(cfg.avoid_enzymes)
+    if cfg.gc_window:
+        for constraints, _ in ladder:
+            # Replace rather than stack a band of the same width (see
+            # LibraryConfig.constraint_ladder).
+            constraints.gc_windows = [b for b in constraints.gc_windows
+                                      if b[0] != cfg.gc_window]
+            constraints.gc_bounds = (cfg.gc_min, cfg.gc_max)
+            constraints.gc_window = cfg.gc_window
+    return ladder
+
+
 def optimize_all(variants: list[Variant], backend, cfg: RunConfig, *, seed: int) -> None:
-    constraints = ConstraintSet(
-        avoid_enzymes=cfg.avoid_enzymes,
-        gc_bounds=(cfg.gc_min, cfg.gc_max) if cfg.gc_window else None,
-        gc_window=cfg.gc_window,
-    )
+    ladder = build_ladder(cfg)
     pad_constraints = ConstraintSet(
         avoid_enzymes=cfg.avoid_enzymes, max_homopolymer=4,
         forbid_low_complexity=True, gc_bounds=(0.30, 0.70),
     )
     for i, v in enumerate(variants):
-        frag = build_fragment(
-            v.protein, species=cfg.species, constraints=constraints,
+        frag, step, relaxed = build_fragment_with_ladder(
+            v.protein, ladder, species=cfg.species,
             flanks=cfg.flanks, min_length=cfg.min_length,
             pad_constraints=pad_constraints, backend=backend, seed=seed + i,
         )
         v.dna_coding = frag.coding
         v.dna_final = frag.final
+        v.ladder_step = step
+        v.relaxed = relaxed
 
 
 # --------------------------------------------------------------------------- #
@@ -256,7 +280,14 @@ def write_outputs(variants: list[Variant], out_dir: Path, stamp: str, cfg: RunCo
             "Parent": v.parent_id, "Set": v.set_name, "Parent_TSV_ID": v.parent_tsv_id,
             "Mutation": v.mutation or "", "Score": "" if v.score is None else v.score,
             "Type": "parent" if v.is_parent else "mutant", "Protein": v.protein,
-            "Protein_len": len(v.protein), "Coding_DNA": v.dna_coding,
+            "Protein_len": len(v.protein),
+            "Repeat8_pct": (f"{v.synthesis.repeat_fraction * 100:.1f}"
+                            if v.synthesis else ""),
+            "Repeat_dens90_pct": (f"{v.synthesis.repeat_window_fraction * 100:.1f}"
+                                  if v.synthesis else ""),
+            "GC_pct": f"{v.synthesis.gc * 100:.1f}" if v.synthesis else "",
+            "Ladder_step": v.ladder_step,
+            "Coding_DNA": v.dna_coding,
             "Final_DNA": v.dna_final, "Final_len": len(v.dna_final),
         }
         for v in variants
@@ -320,6 +351,7 @@ def verify(variants: list[Variant], cfg: RunConfig) -> list[str]:
     avoided = enzymes.patterns_for(cfg.avoid_enzymes)
     wells_seen: set[str] = set()
     new_ids: list[str] = []
+    spec = synthesis_mod.get_profile(cfg.synthesis_profile).spec
 
     # Small tolerance so a window landing exactly on the cap isn't flagged.
     gc_tol = 1e-9
@@ -348,6 +380,12 @@ def verify(variants: list[Variant], cfg: RunConfig) -> list[str]:
                 problems.append(
                     f"{v.descriptive_id}: min {cfg.gc_window}bp-window GC {lo*100:.1f}% "
                     f"< floor {cfg.gc_min*100:.1f}%.")
+        if cfg.check_synthesis:
+            # Measure what the DNA vendor measures. Without this, a run reports
+            # success and the rejection arrives days later at the order desk.
+            report = synthesis_mod.check(v.dna_final, spec)
+            v.synthesis = report
+            problems.extend(f"{v.descriptive_id}: {m}" for m in report.problems)
         if v.well in wells_seen:
             problems.append(f"{v.descriptive_id}: duplicate well {v.well}.")
         wells_seen.add(v.well)

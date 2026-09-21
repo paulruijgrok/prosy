@@ -16,6 +16,8 @@ Two backends share one interface:
 from __future__ import annotations
 
 import random
+import zlib
+from contextlib import contextmanager
 from typing import Protocol
 
 from prosy.core.sequence import (
@@ -295,12 +297,51 @@ def alt_removes(codons: list[str], avoid: list[str], idx: int) -> bool:
 
 
 class DnaChiselBackend:
-    """Wraps DNAChisel to reproduce the original codon_optimize.py behaviour."""
+    """Wraps DNAChisel to reproduce the original codon_optimize.py behaviour.
+
+    DNAChisel's constraint resolution draws on the *global* ``random`` (and
+    numpy) state, so without seeding, two identical runs produce different
+    sequences and an order placed today cannot be regenerated tomorrow. Each
+    :meth:`optimize` call therefore seeds those generators from ``seed`` plus a
+    stable digest of its own inputs, and restores the caller's state
+    afterwards. The per-input digest keeps sequences independent of the order
+    they are optimized in, so adding one design to a set does not change the
+    others.
+    """
 
     name = "dnachisel"
 
-    def __init__(self):
+    def __init__(self, seed: int | None = 0):
         import dnachisel  # noqa: F401  (import error surfaces to caller)
+
+        self._seed = seed
+
+    def _derived_seed(self, *parts: object) -> int:
+        payload = "|".join(str(p) for p in (self._seed, *parts)).encode()
+        return zlib.crc32(payload) & 0xFFFFFFFF
+
+    @contextmanager
+    def _deterministic(self, *parts: object):
+        """Seed the global RNGs reproducibly, then hand the caller's back."""
+        if self._seed is None:
+            yield
+            return
+        derived = self._derived_seed(*parts)
+        py_state = random.getstate()
+        random.seed(derived)
+        try:
+            import numpy as np
+
+            np_state = np.random.get_state()
+            np.random.seed(derived)
+        except ImportError:
+            np = np_state = None
+        try:
+            yield
+        finally:
+            random.setstate(py_state)
+            if np is not None:
+                np.random.set_state(np_state)
 
     def optimize(
         self,
@@ -385,15 +426,19 @@ class DnaChiselBackend:
                 include_reverse_complement=unique_kmers_include_rc,
                 boost=soft_unique_kmer_boost))
 
-        problem = DnaOptimizationProblem(
-            sequence=full,
-            constraints=constraints,
-            objectives=objectives,
-            logger=None,
-        )
-        problem.resolve_constraints()
-        problem.optimize()
-        return problem.sequence[cstart:cend]
+        with self._deterministic(protein, species, codon_method, unique_kmer_size,
+                                 soft_unique_kmer_size, min_codon_frequency,
+                                 left, right, tuple(avoid_patterns or ()),
+                                 tuple(bands)):
+            problem = DnaOptimizationProblem(
+                sequence=full,
+                constraints=constraints,
+                objectives=objectives,
+                logger=None,
+            )
+            problem.resolve_constraints()
+            problem.optimize()
+            return problem.sequence[cstart:cend]
 
 
 def dnachisel_available() -> bool:
@@ -414,7 +459,8 @@ def get_backend(prefer: str | None = None, *, seed: int | None = 0) -> CodonBack
     if prefer == "highest_frequency":
         return HighestFrequencyBackend(seed=seed)
     if prefer == "dnachisel":
-        return DnaChiselBackend()
+        return DnaChiselBackend(seed=seed)
     if prefer is None:
-        return DnaChiselBackend() if dnachisel_available() else HighestFrequencyBackend(seed=seed)
+        return (DnaChiselBackend(seed=seed) if dnachisel_available()
+                else HighestFrequencyBackend(seed=seed))
     raise ValueError(f"Unknown backend {prefer!r}")

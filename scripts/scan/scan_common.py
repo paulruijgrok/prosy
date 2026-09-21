@@ -22,6 +22,7 @@ from prosy.core import goldengate as gg  # noqa: E402
 from prosy.core import io  # noqa: E402
 from prosy.core import library as lib  # noqa: E402
 from prosy.core import scan as scan_mod  # noqa: E402
+from prosy.core import synthesis as synthesis_mod  # noqa: E402
 from prosy.core.cloning import Flanks  # noqa: E402
 from prosy.core.sequence import validate_protein  # noqa: E402
 
@@ -124,6 +125,15 @@ def add_library_args(p: argparse.ArgumentParser) -> None:
     g.add_argument("--backend", default=None,
                    help="Codon backend: 'dnachisel', 'highest_frequency', or omit to auto-select.")
     g.add_argument("--seed", type=int, default=0)
+    g.add_argument("--synthesis-profile", default="vendor-standard",
+                   choices=sorted(synthesis_mod.PROFILES),
+                   help="Manufacturability constraints applied at design time, and "
+                        "the acceptance spec the fragments are gated on. Plain codon "
+                        "optimization ('none') leaves ~70%% repeated-8-mer coverage, "
+                        "which DNA vendors reject (default: vendor-standard).")
+    g.add_argument("--no-check-synthesis", action="store_true",
+                   help="Build under the profile but do not fail on its acceptance "
+                        "spec. For inspecting a borderline set, not for ordering.")
     g.add_argument("--assembly-checks", type=int, default=3,
                    help="How many fragments to assemble in silico and translate "
                         "(-1 = all, 0 = none).")
@@ -227,6 +237,8 @@ def run(args: argparse.Namespace, name: str, protein: str, positions) -> ScanRun
         avoid_enzymes=list(args.avoid), min_length=args.min_length,
         gc_window=args.gc_window, gc_max=args.gc_max, gc_min=args.gc_min,
         plate_size=args.plate_size, plate_order=args.plate_order, seed=args.seed,
+        synthesis_profile=args.synthesis_profile,
+        check_synthesis=not args.no_check_synthesis,
     )
     backend = codon_mod.get_backend(args.backend, seed=args.seed)
 
@@ -269,6 +281,19 @@ def report(run_result: ScanRun, args: argparse.Namespace) -> int:
         plates = max(m.plate for m in r.members)
         print(f"  {len(r.members)} fragment(s), {min(lengths)}-{max(lengths)} bp, "
               f"{plates} plate(s)")
+        profile = synthesis_mod.get_profile(args.synthesis_profile)
+        gate = "off (NOT order-ready)" if args.no_check_synthesis else "on"
+        print(f"  synthesis profile {profile.name}, gate {gate}")
+        relaxed = [m for m in r.members if m.relaxed]
+        if relaxed:
+            steps = sorted({m.ladder_step for m in relaxed})
+            print(f"  {len(relaxed)} fragment(s) needed a relaxed step ({', '.join(steps)})")
+        reported = [m for m in r.members if m.synthesis]
+        if reported:
+            reps = [m.synthesis.repeat_fraction * 100 for m in reported]
+            gcs = [m.synthesis.gc * 100 for m in reported]
+            print(f"  repeat8 {min(reps):.1f}-{max(reps):.1f}%, "
+                  f"GC {min(gcs):.1f}-{max(gcs):.1f}%")
     for value in r.outputs.values():
         if isinstance(value, list):
             for v in value:

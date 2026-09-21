@@ -136,3 +136,30 @@ def build_fragment(
         seq = pad_to_length(seq, min_length, constraints=pad_constraints,
                             species=species, seed=seed)
     return Fragment(protein=result.protein, coding=result.dna, final=seq, backend=backend.name)
+
+
+def build_fragment_with_ladder(
+    protein: str,
+    ladder: list[tuple[ConstraintSet, str]],
+    **kwargs,
+) -> tuple[Fragment, str, bool]:
+    """Try each ``(constraints, label)`` in turn; return the first that solves.
+
+    Returns ``(fragment, label, relaxed)``. Used with
+    :meth:`prosy.core.synthesis.SynthesisProfile.constraint_ladder`, where the
+    strictest step gives a hard guarantee and later steps degrade to a
+    best-effort objective rather than failing outright. Raises the last solver
+    error if no step succeeds.
+    """
+    if not ladder:
+        raise ValueError("ladder must contain at least one ConstraintSet.")
+    last: Exception | None = None
+    for step, (constraints, label) in enumerate(ladder):
+        try:
+            fragment = build_fragment(protein, constraints=constraints, **kwargs)
+        except Exception as exc:  # noqa: BLE001 - solver reports infeasibility
+            last = exc
+            continue
+        return fragment, label, step > 0
+    raise RuntimeError(
+        f"No ladder step satisfied the constraints. Last solver error: {last}")

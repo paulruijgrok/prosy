@@ -40,6 +40,7 @@ sys.path.insert(0, str(_HERE.parent))       # this dir -> 'nanobody_common'
 import nanobody_common as nb  # noqa: E402
 from prosy.core import codon as codon_mod  # noqa: E402
 from prosy.core import layout as layout_mod  # noqa: E402
+from prosy.core import synthesis as synthesis_mod  # noqa: E402
 from prosy.core.cloning import Flanks  # noqa: E402
 
 # Default parent selection (reproduces the original column plate).
@@ -87,6 +88,15 @@ def main() -> None:
                         "over a 50 bp window this is exactly <=36 GC bases).")
     p.add_argument("--gc-min", type=float, default=0.0, metavar="PCT",
                    help="Min GC%% required in any --gc-window (default: 0 = no floor).")
+    p.add_argument("--synthesis-profile", default="vendor-standard",
+                   choices=sorted(synthesis_mod.PROFILES),
+                   help="Manufacturability constraints applied at design time and "
+                        "the acceptance spec the result is gated on. Plain codon "
+                        "optimization ('none') leaves ~70%% repeated-8-mer coverage, "
+                        "which DNA vendors reject (default: vendor-standard).")
+    p.add_argument("--no-check-synthesis", action="store_true",
+                   help="Build under the profile but do not fail on its acceptance "
+                        "spec. For inspecting a borderline set, not for ordering.")
     p.add_argument("--new-id-start", type=int, default=73)
     p.add_argument("--new-id-prefix", default="Nb")
     p.add_argument("--backend", choices=["auto", "dnachisel", "highest_frequency"],
@@ -101,6 +111,8 @@ def main() -> None:
         min_length=args.min_length,
         gc_window=args.gc_window if args.gc_window > 0 else None,
         gc_max=args.gc_max / 100.0, gc_min=args.gc_min / 100.0,
+        synthesis_profile=args.synthesis_profile,
+        check_synthesis=not args.no_check_synthesis,
         mutations_per_parent=args.mutations_per_parent,
         new_id_start=args.new_id_start, new_id_prefix=args.new_id_prefix,
         orientation=args.orientation, plate_size=args.plate_size,
@@ -131,6 +143,13 @@ def main() -> None:
         print(f"GC cap: max {cfg.gc_max*100:.0f}%{floor} over {cfg.gc_window} bp windows")
     else:
         print("GC cap: (none)")
+    profile = synthesis_mod.get_profile(cfg.synthesis_profile)
+    print(f"Synthesis profile: {profile.name} - {profile.description}")
+    if profile.unique_kmer_size:
+        print(f"  unique {profile.unique_kmer_size}-mers (both strands), "
+              f"codon freq >= {profile.min_codon_frequency}, "
+              f"overall GC {profile.gc_global[0]*100:.0f}-{profile.gc_global[1]*100:.0f}%")
+    print(f"  gate: {'on' if cfg.check_synthesis else 'OFF (not order-ready)'}")
     print(f"Flanks: 5'={cfg.flanks.five_prime}  3'={cfg.flanks.three_prime}")
     print(f"Mutations/parent: {cfg.mutations_per_parent}  "
           f"New IDs from: {cfg.new_id_prefix}{cfg.new_id_start}")
@@ -143,6 +162,16 @@ def main() -> None:
 
     print(f"\nVariants: {len(variants)} "
           f"(mutants: {sum(not v.is_parent for v in variants)})")
+    relaxed = [v for v in variants if v.relaxed]
+    if relaxed:
+        print(f"Relaxed ladder step for {len(relaxed)}: "
+              + ", ".join(f"{v.descriptive_id} ({v.ladder_step})" for v in relaxed[:6])
+              + (" ..." if len(relaxed) > 6 else ""))
+    if any(v.synthesis for v in variants):
+        reps = [v.synthesis.repeat_fraction * 100 for v in variants if v.synthesis]
+        gcs = [v.synthesis.gc * 100 for v in variants if v.synthesis]
+        print(f"Manufacturability: repeat8 {min(reps):.1f}-{max(reps):.1f}%, "
+              f"GC {min(gcs):.1f}-{max(gcs):.1f}%")
     print(f"Plate xlsx : {out['plate_xlsx']}")
     print(f"Plate xls  : {out['plate_xls'] or '(LibreOffice not available - xlsx only)'}")
     print(f"Design CSV : {out['design']}")

@@ -26,9 +26,10 @@ from prosy.core import codon as codon_mod
 from prosy.core import goldengate as gg
 from prosy.core import io
 from prosy.core import plate as plate_mod
+from prosy.core import synthesis
 from prosy.core.cloning import Flanks
 from prosy.core.constraints import ConstraintSet
-from prosy.core.optimize import build_fragment
+from prosy.core.optimize import build_fragment_with_ladder
 from prosy.core.scan import ScanVariant
 from prosy.core.sequence import SYNONYMOUS_CODONS, SequenceError, translate
 
@@ -52,6 +53,12 @@ class LibraryConfig:
     plate_size: int = 96
     plate_order: str = "column"       # "column" or "row"
     seed: int = 0
+    # Manufacturability. Plain codon optimization reuses the same best codon
+    # everywhere and lands around 70% repeated-8-mer coverage, which DNA
+    # vendors reject. The profile constrains that at design time; its spec
+    # gates the finished fragments. See prosy.core.synthesis.
+    synthesis_profile: str = "vendor-standard"
+    check_synthesis: bool = True
 
     def __post_init__(self) -> None:
         if not self.avoid_enzymes:
@@ -59,12 +66,32 @@ class LibraryConfig:
         elif self.enzyme not in self.avoid_enzymes:
             self.avoid_enzymes = [self.enzyme, *self.avoid_enzymes]
 
+    @property
+    def profile(self):
+        return synthesis.get_profile(self.synthesis_profile)
+
+    def constraint_ladder(self) -> list[tuple[ConstraintSet, str]]:
+        """Successive constraint attempts, strictest first.
+
+        The profile supplies the manufacturability constraints; this run's own
+        ``gc_window``/``gc_max`` cap is layered on top of every step so the
+        older, explicit knob keeps working alongside a profile.
+        """
+        ladder = self.profile.constraint_ladder(self.avoid_enzymes)
+        if self.gc_window:
+            for constraints, _ in ladder:
+                # Replace, don't stack: the profile usually carries a band of
+                # the same width, and handing the solver two overlapping GC
+                # constraints changes its search path for no benefit.
+                constraints.gc_windows = [b for b in constraints.gc_windows
+                                          if b[0] != self.gc_window]
+                constraints.gc_bounds = (self.gc_min, self.gc_max)
+                constraints.gc_window = self.gc_window
+        return ladder
+
     def coding_constraints(self) -> ConstraintSet:
-        return ConstraintSet(
-            avoid_enzymes=self.avoid_enzymes,
-            gc_bounds=(self.gc_min, self.gc_max) if self.gc_window else None,
-            gc_window=self.gc_window,
-        )
+        """The strictest step of the ladder (what a single build would use)."""
+        return self.constraint_ladder()[0][0]
 
     def padding_constraints(self) -> ConstraintSet:
         return ConstraintSet(
@@ -88,6 +115,9 @@ class LibraryMember:
     plate: int = 1
     well: str = ""
     degenerate_codon: str | None = None
+    ladder_step: str = ""
+    relaxed: bool = False
+    synthesis: synthesis.SynthesisReport | None = None
 
     @property
     def name(self) -> str:
@@ -119,24 +149,25 @@ def build_library(
     if backend is None or isinstance(backend, str):
         backend = codon_mod.get_backend(backend, seed=cfg.seed)
 
-    coding_constraints = cfg.coding_constraints()
+    ladder = cfg.constraint_ladder()
     padding_constraints = cfg.padding_constraints()
 
-    cache: dict[str, tuple[str, str]] = {}
+    cache: dict[str, tuple[str, str, str, bool]] = {}
     members: list[LibraryMember] = []
     for i, variant in enumerate(variants):
         cached = cache.get(variant.protein)
         if cached is None:
-            frag = build_fragment(
-                variant.protein, species=cfg.species, constraints=coding_constraints,
+            frag, step, relaxed = build_fragment_with_ladder(
+                variant.protein, ladder, species=cfg.species,
                 flanks=cfg.flanks, min_length=cfg.min_length,
                 pad_constraints=padding_constraints, backend=backend,
                 seed=cfg.seed + i,
             )
-            cached = (frag.coding, frag.final)
+            cached = (frag.coding, frag.final, step, relaxed)
             cache[variant.protein] = cached
-        members.append(LibraryMember(variant=variant, dna_coding=cached[0],
-                                     dna_final=cached[1]))
+        members.append(LibraryMember(
+            variant=variant, dna_coding=cached[0], dna_final=cached[1],
+            ladder_step=cached[2], relaxed=cached[3]))
         if progress and (i + 1) % 25 == 0:
             print(f"  optimized {i + 1}/{len(variants)}", flush=True)
     assign_wells(members, cfg)
@@ -164,8 +195,8 @@ def build_degenerate_library(
     if backend is None or isinstance(backend, str):
         backend = codon_mod.get_backend(backend, seed=cfg.seed)
 
-    base = build_fragment(
-        parent.protein, species=cfg.species, constraints=cfg.coding_constraints(),
+    base, _, _ = build_fragment_with_ladder(
+        parent.protein, cfg.constraint_ladder(), species=cfg.species,
         flanks=cfg.flanks, min_length=0, backend=backend, seed=cfg.seed,
     )
     forbidden = cfg.coding_constraints().patterns()
@@ -343,6 +374,12 @@ def verify_library(
                     f"floor {cfg.gc_min * 100:.1f}%.")
         if ends is not None and m.degenerate_codon is None:
             problems.extend(f"{tag}: {p}" for p in gg.check_fragment(final, ends, cfg.enzyme))
+        if cfg.check_synthesis and m.degenerate_codon is None:
+            # Measure what the DNA vendor measures, so a rejection surfaces
+            # here rather than days later at the order desk.
+            report = synthesis.check(final, cfg.profile.spec)
+            m.synthesis = report
+            problems.extend(f"{tag}: {p}" for p in report.problems)
         key = (m.plate, m.well)
         if key in seen:
             problems.append(f"{tag}: duplicate well {m.plate_well}.")
@@ -402,6 +439,7 @@ def orf_protein(product: str, *, start_motif: str = "ATG") -> str | None:
 MAPPING_COLUMNS = [
     "Plate", "Well", "Name", "Parent", "Scan", "Mutation", "Position",
     "WT", "Mut", "Category", "Protein_len", "Final_len", "GC",
+    "Repeat8_pct", "Repeat_dens90_pct", "Ladder_step",
     "Protein", "Coding_DNA", "Final_DNA",
 ]
 
@@ -433,6 +471,11 @@ def write_library(
             "Category": v.category or "", "Protein_len": len(v.protein),
             "Final_len": len(m.dna_final),
             "GC": f"{gc / len(m.dna_final):.3f}" if m.dna_final else "",
+            "Repeat8_pct": (f"{m.synthesis.repeat_fraction * 100:.1f}"
+                            if m.synthesis else ""),
+            "Repeat_dens90_pct": (f"{m.synthesis.repeat_window_fraction * 100:.1f}"
+                                  if m.synthesis else ""),
+            "Ladder_step": m.ladder_step,
             "Protein": v.protein, "Coding_DNA": m.dna_coding,
             "Final_DNA": m.dna_final,
         })

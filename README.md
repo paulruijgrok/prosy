@@ -99,10 +99,43 @@ and still drives the `260626`/`260720` plate sets.
 | `antibody` | Motif-anchored CDR and framework annotation for VHH/VH domains (IMGT, Kabat, extended). |
 | `goldengate` | Type IIS digestion, destination analysis, adapter design and in-silico assembly. |
 | `library` | Variants → verified, plated, orderable fragments; mapping/design/plate outputs. |
+| `synthesis` | Vendor manufacturability: repeat coverage, windowed repeat density and GC, homopolymers; named `SynthesisProfile`s and the gate that fails a run. |
 | `plate` | 96-/384-well coordinate helpers, column- or row-major fill. |
 | `layout` | Place groups (parent + N mutants) onto a plate; row/column packing, 96/384, alignment checks. |
 | `platemap` | Dependency-free SVG plate-map renderer (colour-coded, labeled); optional PNG via matplotlib/LibreOffice. |
 | `io` | Read/write CSV/TSV/XLSX, flexible column matching, vendor plate-sheet writer. |
+
+## Synthesis manufacturability — read before ordering DNA
+
+Plain codon optimization is **not** orderable. `use_best_codon` picks the single
+most frequent codon for each residue, so every Ala is `GCG` and every Leu
+`CTG`, and repeated 8-mers end up covering ~70% of a fragment against a typical
+vendor limit of 40%. This is the expected output of maximal CAI optimization,
+not bad luck — it rejected a whole 84-fragment order in September 2026, and the
+96-well nanobody plate built the same way had 64 wells over the limit.
+
+Every script that produces DNA therefore defaults to
+`--synthesis-profile vendor-standard`, which constrains repeats, GC and rare
+codons at design time and then **gates the run** on the resulting measurements:
+
+| | plain optimization | `vendor-standard` |
+|---|---|---|
+| 8-mer repeat coverage (both strands) | 58–78% | 0–8% |
+| overall GC | 62–66% | 55–56% |
+| rare codons | 0% | ~0.3%, no tandem runs |
+| fragments a vendor would reject | most | none |
+
+`prosy.core.synthesis` measures what the vendor measures, so a breach fails the
+run instead of surfacing days later at the order desk. Use
+`--no-check-synthesis` to inspect a borderline set, and `--synthesis-profile
+none` for the old unconstrained behaviour — neither is order-ready. A different
+vendor is a new `SynthesisProfile`, not a new code path. See
+[docs/golden_gate.md](docs/golden_gate.md).
+
+**Reproducibility:** results are deterministic per `--seed`, and a sequence does
+not change when other designs are added to or removed from the batch. Orders
+placed before 2026-09-21 predate this and cannot be regenerated — their output
+files are the record.
 
 ## Codon backends
 
@@ -111,13 +144,16 @@ and still drives the `260626`/`260720` plate sets.
 - **DNAChisel** (default when installed) reproduces the original
   `codon_optimize.py`: reverse-translate → enforce translation → avoid
   restriction sites → codon-optimize for a species via a global solver. It is
-  also the only backend that solves windowed GC and fixed flank contexts.
+  also the only backend that solves windowed GC, fixed flank contexts, k-mer
+  uniqueness and the rare-codon floor — i.e. everything a synthesis profile
+  asks for.
 - **Highest-frequency fallback** (no dependencies) picks the most frequent
   synonymous codon per residue and greedily swaps codons to clear forbidden
   patterns. It keeps the whole pipeline runnable and testable without
-  DNAChisel, but is not a substitute for it on a production run. Windowed GC is
-  accepted for interface parity and *not* enforced — `library.verify_library()`
-  catches that rather than letting an over-GC fragment reach an order.
+  DNAChisel, but is not a substitute for it on a production run. The
+  global-solver constraints are accepted for interface parity and *not*
+  enforced — the synthesis gate catches that rather than letting an
+  unmanufacturable fragment reach an order.
 
 ## Batch processing
 
@@ -131,7 +167,8 @@ with fail-isolation, per-run logging and resume is the next piece of work — se
 | Path | What it is |
 |---|---|
 | `prosy/core/` | Stable. Covered by `tests/`. |
-| `scripts/scan/` | New; the generic scan and fragment CLIs. |
+| `scripts/scan/` | The generic scan and fragment CLIs. |
+| `scripts/designs/` | Design-set plates: a CSV of designed sequences → verified, plated fragments. |
 | `scripts/nanobodies/` | Task scripts: `nanobody_scan.py` (new), `make_nanobody_plate.py` and its helpers (established). |
 | `data/plasmids/` | Destination vectors, resolved by bare name from `--destination`. |
 | `docs/` | One page per pipeline. |
