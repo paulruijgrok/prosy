@@ -31,6 +31,7 @@ def optimize_cds(
     species: str = "e_coli",
     constraints: ConstraintSet | None = None,
     backend: codon.CodonBackend | str | None = None,
+    codon_method: str = "use_best_codon",
     seed: int | None = 0,
     left_context: str = "",
     right_context: str = "",
@@ -66,6 +67,13 @@ def optimize_cds(
         avoid_patterns=constraints.patterns(),
         gc_bounds=constraints.gc_bounds,
         gc_window=constraints.gc_window,
+        gc_bands=constraints.gc_bands(),
+        unique_kmer_size=constraints.unique_kmer_size,
+        unique_kmers_include_rc=constraints.unique_kmers_include_rc,
+        soft_unique_kmer_size=constraints.soft_unique_kmer_size,
+        soft_unique_kmer_boost=constraints.soft_unique_kmer_boost,
+        min_codon_frequency=constraints.min_codon_frequency,
+        codon_method=codon_method,
         left_context=left_context,
         right_context=right_context,
     )
@@ -94,6 +102,7 @@ def build_fragment(
     min_length: int = 0,
     pad_constraints: ConstraintSet | None = None,
     backend: codon.CodonBackend | str | None = None,
+    codon_method: str = "use_best_codon",
     seed: int = 0,
 ) -> Fragment:
     """End-to-end single-protein pipeline: optimize CDS -> add flanks -> pad.
@@ -116,6 +125,7 @@ def build_fragment(
     # bound is satisfied across the flank/coding junctions of the final construct.
     result = optimize_cds(
         protein, species=species, constraints=constraints, backend=backend,
+        codon_method=codon_method,
         left_context=flanks_obj.five_prime if flanks_obj else "",
         right_context=flanks_obj.three_prime if flanks_obj else "",
     )

@@ -68,11 +68,9 @@ def render_svg(
     pad = 16
     label_gutter = 26          # space for row letters / column numbers
     title_h = 30 if title else 0
-    legend_h = 30
     grid_w = plate.cols * cell_w
     grid_h = plate.rows * cell_h
     width = pad * 2 + label_gutter + grid_w
-    height = pad * 2 + title_h + label_gutter + grid_h + legend_h
 
     ordered_cats: list[str] = []
     for w in plate.wells(order="row"):
@@ -80,6 +78,12 @@ def render_svg(
         if c and c.category and c.category not in ordered_cats:
             ordered_cats.append(c.category)
     palette = _colors_for(ordered_cats)
+
+    # Wrap the legend onto as many lines as the plate width needs: a handful of
+    # long category names otherwise runs off the right-hand edge.
+    legend_rows = _wrap_legend(ordered_cats, grid_w)
+    legend_h = 12 + 18 * len(legend_rows) if ordered_cats else 12
+    height = pad * 2 + title_h + label_gutter + grid_h + legend_h
 
     x0 = pad + label_gutter
     y0 = pad + title_h + label_gutter
@@ -141,20 +145,44 @@ def render_svg(
                 )
 
     # Legend
-    ly = y0 + grid_h + 18
-    lx = x0
-    for cat in ordered_cats:
-        fill, stroke = palette[cat]
-        parts.append(
-            f'<rect x="{lx}" y="{ly - 10}" width="12" height="12" rx="3" '
-            f'fill="{fill}" stroke="{stroke}"/>'
-        )
-        parts.append(
-            f'<text x="{lx + 18}" y="{ly}" font-size="11" fill="#334155">{_esc(cat)}</text>'
-        )
-        lx += 22 + 8 * len(cat) + 18
+    for line_no, row in enumerate(legend_rows):
+        ly = y0 + grid_h + 18 + line_no * 18
+        lx = x0
+        for cat in row:
+            fill, stroke = palette[cat]
+            parts.append(
+                f'<rect x="{lx}" y="{ly - 10}" width="12" height="12" rx="3" '
+                f'fill="{fill}" stroke="{stroke}"/>'
+            )
+            parts.append(
+                f'<text x="{lx + 18}" y="{ly}" font-size="11" fill="#334155">'
+                f'{_esc(cat)}</text>'
+            )
+            lx += _legend_item_width(cat)
     parts.append("</svg>")
     return "\n".join(parts)
+
+
+def _legend_item_width(category: str) -> int:
+    """Swatch + gap + label + trailing gap, at font-size 11."""
+    return 18 + 6 * len(category) + 22
+
+
+def _wrap_legend(categories: list[str], available: int) -> list[list[str]]:
+    """Pack legend entries into lines no wider than ``available`` pixels."""
+    rows: list[list[str]] = []
+    current: list[str] = []
+    used = 0
+    for cat in categories:
+        w = _legend_item_width(cat)
+        if current and used + w > available:
+            rows.append(current)
+            current, used = [], 0
+        current.append(cat)
+        used += w
+    if current:
+        rows.append(current)
+    return rows
 
 
 def write_svg(cells: dict[str, Cell], path: str | Path, **kwargs) -> Path:
@@ -165,36 +193,53 @@ def write_svg(cells: dict[str, Cell], path: str | Path, **kwargs) -> Path:
 
 
 def write_png(cells: dict[str, Cell], path: str | Path, **kwargs) -> Path | None:
-    """Write a PNG if possible (matplotlib, else LibreOffice from SVG). Else None."""
+    """Write a PNG if possible (LibreOffice from the SVG, else matplotlib). None if neither.
+
+    The SVG is the canonical renderer, so converting it is preferred: the PNG is
+    then the same picture, laid out by the same code. ``_png_via_matplotlib`` is
+    an independent reimplementation of the grid and drifts from the SVG when
+    labels or legends are long, so it is the fallback rather than the default.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    svg = render_svg(cells, **kwargs)
 
-    # 1) matplotlib path (renders the SVG-equivalent grid natively).
+    # 1) Convert the canonical SVG (identical layout to write_svg).
+    converted = _png_via_svg(render_svg(cells, **kwargs), path)
+    if converted is not None:
+        return converted
+
+    # 2) Native matplotlib grid.
     try:
         return _png_via_matplotlib(cells, path, **kwargs)
-    except Exception:
-        pass
+    except Exception:  # noqa: BLE001 - matplotlib missing or backend failure
+        return None
 
-    # 2) LibreOffice conversion from a temporary SVG.
+
+def _png_via_svg(svg: str, path: Path) -> Path | None:
+    """Rasterise ``svg`` to ``path`` with LibreOffice, if it is installed."""
     import shutil
     import subprocess
+    import tempfile
 
     soffice = shutil.which("libreoffice") or shutil.which("soffice")
-    if soffice:
-        svg_path = path.with_suffix(".svg")
+    if not soffice:
+        return None
+    with tempfile.TemporaryDirectory() as tmp:
+        svg_path = Path(tmp) / f"{path.stem}.svg"
         svg_path.write_text(svg, encoding="utf-8")
         try:
             subprocess.run(
-                [soffice, "--headless", "--convert-to", "png", "--outdir",
-                 str(path.parent), str(svg_path)],
+                [soffice, "--headless", "--convert-to", "png", "--outdir", tmp,
+                 str(svg_path)],
                 check=True, capture_output=True, timeout=120,
             )
-            if path.exists():
-                return path
         except (subprocess.SubprocessError, OSError):
             return None
-    return None
+        produced = svg_path.with_suffix(".png")
+        if not produced.exists():
+            return None
+        shutil.copyfile(produced, path)
+    return path
 
 
 def _png_via_matplotlib(cells, path, *, plate=96, title=None, **_ignore) -> Path:

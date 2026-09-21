@@ -110,6 +110,13 @@ class CodonBackend(Protocol):
         avoid_patterns: list[str] | None = None,
         gc_bounds: tuple[float, float] | None = None,
         gc_window: int | None = None,
+        gc_bands: list[tuple[int | None, float, float]] | None = None,
+        unique_kmer_size: int | None = None,
+        unique_kmers_include_rc: bool = True,
+        soft_unique_kmer_size: int | None = None,
+        soft_unique_kmer_boost: float = 20.0,
+        min_codon_frequency: float | None = None,
+        codon_method: str = "use_best_codon",
         left_context: str = "",
         right_context: str = "",
     ) -> str:
@@ -117,10 +124,21 @@ class CodonBackend(Protocol):
 
         ``gc_bounds`` are applied over the whole coding region; when
         ``gc_window`` is given the GC bounds instead apply to every sliding
-        window of that width (bp). ``left_context``/``right_context`` are fixed
-        flanking sequences (e.g. cloning adapters) held immutable during
-        optimization so that windowed GC spans the flank/coding junctions; only
-        the coding region is returned.
+        window of that width (bp). ``gc_bands`` supersedes both and allows
+        several windows at once, as ``(window_or_None, min, max)`` triples.
+
+        ``unique_kmer_size`` forbids any repeated k-mer (both strands unless
+        ``unique_kmers_include_rc`` is False) - the constraint that keeps a
+        codon-optimized CDS under a vendor's repeat-complexity limit.
+        ``min_codon_frequency`` sets a floor on synonymous-codon usage, so
+        breaking up repeats does not reintroduce rare codons.
+        ``codon_method`` is DNAChisel's ``use_best_codon`` (default),
+        ``match_codon_usage`` or ``harmonize_rca``.
+
+        ``left_context``/``right_context`` are fixed flanking sequences (e.g.
+        cloning adapters) held immutable during optimization so that windowed
+        GC and k-mer uniqueness span the flank/coding junctions; only the
+        coding region is returned.
         """
         ...
 
@@ -150,13 +168,22 @@ class HighestFrequencyBackend:
         avoid_patterns: list[str] | None = None,
         gc_bounds: tuple[float, float] | None = None,
         gc_window: int | None = None,
+        gc_bands: list[tuple[int | None, float, float]] | None = None,
+        unique_kmer_size: int | None = None,
+        unique_kmers_include_rc: bool = True,
+        soft_unique_kmer_size: int | None = None,
+        soft_unique_kmer_boost: float = 20.0,
+        min_codon_frequency: float | None = None,
+        codon_method: str = "use_best_codon",
         left_context: str = "",
         right_context: str = "",
     ) -> str:
         # This dependency-free fallback enforces GC over the whole coding region
-        # only; it does not solve the windowed-GC / fixed-context problem (that
-        # needs DNAChisel's global solver). gc_window and the flank contexts are
-        # accepted for interface parity but not enforced here.
+        # only. The global-solver constraints - windowed GC, fixed flank
+        # context, k-mer uniqueness, the rare-codon floor and the codon method -
+        # are accepted for interface parity but NOT enforced here; they need
+        # DNAChisel. prosy.core.synthesis.check() is what catches the
+        # difference before an order goes out.
         protein = validate_protein(protein)
         table = usage_table(species)
         avoid = [p.upper() for p in (avoid_patterns or [])]
@@ -283,16 +310,25 @@ class DnaChiselBackend:
         avoid_patterns: list[str] | None = None,
         gc_bounds: tuple[float, float] | None = None,
         gc_window: int | None = None,
+        gc_bands: list[tuple[int | None, float, float]] | None = None,
+        unique_kmer_size: int | None = None,
+        unique_kmers_include_rc: bool = True,
+        soft_unique_kmer_size: int | None = None,
+        soft_unique_kmer_boost: float = 20.0,
+        min_codon_frequency: float | None = None,
+        codon_method: str = "use_best_codon",
         left_context: str = "",
         right_context: str = "",
     ) -> str:
         from dnachisel import (
             AvoidChanges,
             AvoidPattern,
+            AvoidRareCodons,
             CodonOptimize,
             DnaOptimizationProblem,
             EnforceGCContent,
             EnforceTranslation,
+            UniquifyAllKmers,
             reverse_translate,
         )
 
@@ -316,17 +352,43 @@ class DnaChiselBackend:
         # fixed and may legitimately contain e.g. the Type IIS site themselves.
         for pat in avoid_patterns or []:
             constraints.append(AvoidPattern(pat, location=coding_loc))
-        if gc_bounds is not None or gc_window is not None:
+
+        # GC bands. `gc_bands` stacks the simple gc_bounds/gc_window pair with
+        # any extra windows, so several widths can be enforced at once.
+        bands = list(gc_bands or [])
+        if not bands and (gc_bounds is not None or gc_window is not None):
             mini, maxi = gc_bounds if gc_bounds is not None else (0.0, 1.0)
+            bands = [(gc_window, mini, maxi)]
+        for window, mini, maxi in bands:
             gc_kwargs = {"mini": mini, "maxi": maxi}
-            if gc_window is not None:
-                gc_kwargs["window"] = gc_window
+            if window is not None:
+                gc_kwargs["window"] = window
             constraints.append(EnforceGCContent(**gc_kwargs))
+
+        if min_codon_frequency:
+            constraints.append(AvoidRareCodons(
+                min_codon_frequency, species=species, location=coding_loc))
+        if unique_kmer_size:
+            # Applied over the whole construct, not just the CDS: a repeat that
+            # straddles the adapter/coding junction counts against the order
+            # just the same. The flanks are AvoidChanges-locked, so only the
+            # coding region can actually move.
+            constraints.append(UniquifyAllKmers(
+                k=unique_kmer_size,
+                include_reverse_complement=unique_kmers_include_rc))
+
+        objectives = [CodonOptimize(species=species, method=codon_method,
+                                    location=coding_loc)]
+        if soft_unique_kmer_size:
+            objectives.append(UniquifyAllKmers(
+                k=soft_unique_kmer_size,
+                include_reverse_complement=unique_kmers_include_rc,
+                boost=soft_unique_kmer_boost))
 
         problem = DnaOptimizationProblem(
             sequence=full,
             constraints=constraints,
-            objectives=[CodonOptimize(species=species, location=coding_loc)],
+            objectives=objectives,
             logger=None,
         )
         problem.resolve_constraints()
