@@ -187,16 +187,13 @@ Modified:
 
 ## Open items / next steps
 
-- **Nothing is committed.** Six modified core modules plus `scripts/designs/`
-  and two test files are sitting in the working tree.
-- **Retro-fit the synthesis gate onto the other pipelines.** `make_nanobody_plate.py`
-  and the scan CLIs still build with `use_best_codon` and no repeat constraint,
-  so they will produce the same ~70%-repeat sequences that were rejected here.
-  This is the highest-value follow-up: the bug is in the shared default, not in
-  the design script.
-- **Make the v3 settings the default**, rather than a long command line. A named
-  vendor profile (`--synthesis-profile twist`) mapping to the whole flag set
-  would stop the next order being built the old way by omission.
+- ~~**Nothing is committed.**~~ Committed as `33f9be1` (+ journal `5ff2a57`).
+- ~~**Retro-fit the synthesis gate onto the other pipelines.**~~ Done — see
+  `2026-09-21b_synthesis-profiles-across-all-scripts.md`. The nanobody plate
+  turned out to have 64/96 wells a vendor would have rejected.
+- ~~**Make the v3 settings the default.**~~ Done: `--synthesis-profile
+  vendor-standard` is the default in all four entry points, and reproduces the
+  v3 order with no tuning flags.
 - **Fold `nanobody_common.py` onto `library.py`** (carried over; still true).
 - Batch runner still missing; a panel of parents is a shell loop.
 - `library.write_library()` still emits no plate maps.
