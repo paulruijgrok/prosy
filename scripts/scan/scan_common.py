@@ -137,6 +137,13 @@ def add_library_args(p: argparse.ArgumentParser) -> None:
     g.add_argument("--assembly-checks", type=int, default=3,
                    help="How many fragments to assemble in silico and translate "
                         "(-1 = all, 0 = none).")
+    g.add_argument("--expect-prefix", default=None, metavar="AA",
+                   help="Residues the vector adds before the insert (e.g. MSG). "
+                        "With --expect-suffix the assembled ORF must equal "
+                        "prefix+protein+suffix exactly - this is what catches a "
+                        "frame slip that merely shifts a downstream tag.")
+    g.add_argument("--expect-suffix", default=None, metavar="AA",
+                   help="Residues the vector adds after the insert (e.g. GSHHHHHH).")
 
 
 def add_output_args(p: argparse.ArgumentParser) -> None:
@@ -251,10 +258,16 @@ def run(args: argparse.Namespace, name: str, protein: str, positions) -> ScanRun
         members = lib.build_library(variants, cfg, backend=backend, progress=True)
 
     checks = None if args.assembly_checks < 0 else args.assembly_checks
+    exact = args.expect_prefix is not None and args.expect_suffix is not None
+    if exact:
+        prefix, suffix = args.expect_prefix.upper(), args.expect_suffix.upper()
+        expected = lambda m: prefix + m.variant.protein + suffix  # noqa: E731
+    else:
+        expected = lambda m: m.variant.protein  # noqa: E731
     problems = lib.verify_library(
         members, cfg, ends=ends, destination=destination if checks else None,
-        expected_protein=(lambda m: m.variant.protein) if checks else None,
-        assembly_checks=checks,
+        expected_protein=expected if checks else None,
+        expected_exact=exact, assembly_checks=checks,
     )
     outputs |= lib.write_library(members, out_dir, stamp, cfg)
     return ScanRun(name, protein, variants, members, problems, outputs, ends)

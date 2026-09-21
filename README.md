@@ -21,12 +21,13 @@ python -m pytest tests/ -q
 
 # Alanine-scan a nanobody's CDRs and build fragments for Golden Gate into FP01:
 python scripts/nanobodies/nanobody_scan.py --parent Nb01 --scan alanine \
-    --fragments --gc-window 50 --gc-max 0.72 --out-dir /tmp/nb01
+    --fragments --out-dir /tmp/nb01
 ```
 
 That writes a plate-upload `.xlsx`, a design CSV and a full mapping CSV, and
 prints `All checks passed.` only if every fragment translated correctly, carried
-the right overhangs and assembled into the expected fusion protein in silico.
+the right overhangs, cleared the vendor's manufacturability limits, and
+assembled into the expected fusion protein in silico.
 
 The same three scans on any protein, with the whole sequence as the default
 target set:
@@ -35,6 +36,10 @@ target set:
 python scripts/scan/mutational_scan.py --protein-file myprotein.fa --scan saturation \
     --positions 31-35,50-65 --fragments --destination FP01
 ```
+
+**→ [docs/cookbook.md](docs/cookbook.md) has tested commands for every pipeline**
+— scans, nanobody plates, design-set plates, the inspection tools, the Python
+API, and a troubleshooting table.
 
 ## Installation
 
@@ -171,7 +176,7 @@ with fail-isolation, per-run logging and resume is the next piece of work — se
 | `scripts/designs/` | Design-set plates: a CSV of designed sequences → verified, plated fragments. |
 | `scripts/nanobodies/` | Task scripts: `nanobody_scan.py` (new), `make_nanobody_plate.py` and its helpers (established). |
 | `data/plasmids/` | Destination vectors, resolved by bare name from `--destination`. |
-| `docs/` | One page per pipeline. |
+| `docs/` | `cookbook.md` (commands for everything), plus one page per pipeline. |
 | `tests/` | `python -m pytest tests/` — runs green without DNAChisel installed. |
 | `journals/` | Per-session work log. |
 | `Working folder/` | Dated run outputs; not code. |

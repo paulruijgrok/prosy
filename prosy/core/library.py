@@ -319,6 +319,7 @@ def verify_library(
     ends: gg.DestinationEnds | None = None,
     destination: str | None = None,
     expected_protein=None,
+    expected_exact: bool = False,
     assembly_checks: int | None = 3,
 ) -> list[str]:
     """Return a list of problems; an empty list means every check passed.
@@ -397,7 +398,16 @@ def verify_library(
                 continue
             want = expected_protein(m)
             got = orf_protein(product)
-            if got is None or want not in got:
+            if got is None:
+                problems.append(f"{m.name}: assembled product has no ORF.")
+            elif expected_exact and got != want:
+                # Containment alone cannot see a frame slip that merely shifts a
+                # downstream tag, so an exact comparison is what catches it.
+                problems.append(
+                    f"{m.name}: assembled ORF is {got[:len(want) and 8]}...{got[-12:]} "
+                    f"({len(got)} aa), expected ...{want[-12:]} ({len(want)} aa) - "
+                    "check the reading frame at the 3' junction.")
+            elif not expected_exact and want not in got:
                 problems.append(
                     f"{m.name}: assembled ORF does not contain the expected protein.")
     return problems

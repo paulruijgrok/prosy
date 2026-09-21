@@ -3,6 +3,9 @@
 `prosy.core.goldengate` reads a destination plasmid and works out what an insert
 must look like; `prosy.core.library` builds, verifies and plates the fragments.
 
+See also [the cookbook](cookbook.md) for tested,
+copy-pasteable commands covering every pipeline.
+
 ## The one rule everything rests on
 
 All Type IIS reasoning here happens in **top-strand coordinates**:
@@ -102,17 +105,23 @@ Every fragment, every run:
 - the coding region and both adapters survive padding intact;
 - the excised insert's overhangs match what the destination demands;
 - sliding-window GC stays inside `--gc-min`/`--gc-max` when `--gc-window` is set;
+- the synthesis profile's manufacturability limits — repeat coverage, windowed
+  repeat density, windowed and overall GC, homopolymers (see the README);
 - no duplicate wells;
 - and, for `--assembly-checks` fragments (`-1` = all), a full in-silico assembly
-  whose ORF contains the expected protein.
+  whose ORF contains the expected protein — or *equals* `--expect-prefix` +
+  protein + `--expect-suffix` when both are given. Containment alone cannot see
+  a frame slip that merely shifts a downstream tag, which is exactly the trap
+  gg002 sets; the exact form catches it.
 
 Nothing is written as "passed" unless every one of those holds; the CLI exits
 non-zero and lists the failures otherwise.
 
-> **Windowed GC needs DNAChisel.** The dependency-free fallback backend enforces
-> GC over the whole coding region only. Verification catches its failures rather
-> than letting an over-GC fragment through, but for production runs with
-> `--gc-window`, install `.[optimize]`.
+> **The constraints need DNAChisel.** The dependency-free fallback backend
+> enforces GC over the whole coding region only — not windowed GC, k-mer
+> uniqueness or the rare-codon floor. Verification catches its failures rather
+> than letting an unmanufacturable fragment through, but for anything you intend
+> to order, install `.[optimize]`.
 
 ## Degenerate-codon libraries
 

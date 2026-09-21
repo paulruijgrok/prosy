@@ -4,6 +4,9 @@ Turning one protein into a designed set of single mutants, and (optionally) into
 synthesis-ready DNA. The protein-level work lives in `prosy.core.scan`; the
 antibody-specific position defaults live in `prosy.core.antibody`.
 
+See also [the cookbook](cookbook.md) for tested,
+copy-pasteable commands covering every pipeline.
+
 ## Position selection
 
 Every scan takes the same `positions` argument and resolves it through
