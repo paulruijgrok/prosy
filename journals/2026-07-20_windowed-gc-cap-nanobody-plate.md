@@ -61,14 +61,14 @@ python -m pytest tests/ -q
 # Regenerate the order at <75% GC into a NEW dir (inputs copied there first)
 cd scripts/nanobodies
 python make_nanobody_plate.py --backend dnachisel --gc-window 50 --gc-max 75 \
-  --stamp 260626 --data-dir "../../Working folder/260720_NanobodyMuts_gc75"
+  --stamp 260626 --data-dir "../../data/runs/nanobody_plate"
 
 # Independent verification + profile plot
 python gc_sliding_window.py \
-  --input "../../Working folder/260720_NanobodyMuts_gc75/260626_nanobody_mapping.csv" \
+  --input "../../data/runs/nanobody_plate/260626_nanobody_mapping.csv" \
   --window 50 \
-  --out   "../../Working folder/260720_NanobodyMuts_gc75/260626_gc_windows_50bp.csv" \
-  --plot  "../../Working folder/260720_NanobodyMuts_gc75/260626_gc_profile_50bp.png"
+  --out   "../../data/runs/nanobody_plate/260626_gc_windows_50bp.csv" \
+  --plot  "../../data/runs/nanobody_plate/260626_gc_profile_50bp.png"
 ```
 
 ## Results / verification
@@ -77,7 +77,7 @@ python gc_sliding_window.py \
 - Independent recompute of the regenerated order: worst 50 bp window
   **84% → 74%** across all 96 variants; translation preserved, flanks intact,
   coding regions BsaI-clean, all pipeline self-checks pass.
-- Output dir: `Working folder/260720_NanobodyMuts_gc75/` (original
+- Output dir: `data/runs/nanobody_plate/` (original
   `260626_NanobodyMuts/` left untouched).
 
 ## Open items / next steps

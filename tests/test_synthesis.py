@@ -1,10 +1,16 @@
 """Tests for prosy.core.synthesis: the manufacturability checks a vendor runs.
 
-The headline test is a regression pin: ``VENDOR_REJECTED`` is the exact 1035 bp
-fragment a DNA manufacturer rejected for the 260917 order, and the numbers
-asserted against it are the ones the vendor's own report quoted. If these
-measurements ever drift, the pipeline has stopped measuring what the vendor
-measures and the gate is worthless.
+``VENDOR_REJECTED`` is a **synthetic** 1035 bp fragment that reproduces the
+failure mode of a real rejected order: a 333 aa design with de-novo-like
+composition, codon-optimized with plain ``use_best_codon`` and no repeat
+constraint. It breaches the same three rules the manufacturer quoted, at
+almost the same magnitudes (70.2% repeat coverage in both cases).
+
+The numbers asserted below are therefore measurements of *this* sequence, not
+quotes from the vendor report. What they pin is the measurement code: if these
+drift, the pipeline has stopped measuring what the vendor measures and the gate
+is worthless. The implementation was originally validated by reproducing the
+vendor's own three figures exactly on the real fragment.
 """
 
 from __future__ import annotations
@@ -18,60 +24,60 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from prosy.core import synthesis  # noqa: E402
 
-# designgroup_target1_h171ban_seq073, as first ordered. The vendor reported:
+# Synthetic stand-in for a rejected fragment. Measured:
 #   - repeated 8-mers cover 70.2% of the sequence (limit 40%)
-#   - >88% of a 90 base window starting at position 613 is repeat
-#   - a 20 base window at position 276 is 95% GC (limit 90%)
+#   - 262 is the start of a 90 base window that is >88% repeat
+#   - a 20 base window at position 884 is 100% GC (limit 90%)
 VENDOR_REJECTED = (
-    "TGTATCGGTCTCGAGGAGCGGCGGCGGTGGAAGTGGTGGAACTGCCGGAAGATGTGACCGGCAGCGAAG"
-    "AAGATATTGAACTGGGCAAACGCATTATTGAAGCGTTTCGCCGCGCGGGCGTGGTGGCGGTGCGCCTGA"
-    "GCCCAGAAGATGAACAGCTGCTGCGCGCGTTTATTGATGGCGCGCGCCGCCTGGCGAAACGCCCGCCAG"
-    "AAGAACTGGGCAAAAGCGTGAGCCCGCGCACCCCGAGCGGCCTGATTCCGGAAGGCCAGCTGACTTTTG"
-    "GCGGCCGCCCGGCGGCAGGCCGTGGTTTTATTGTGAGCGAAGATCTGGAAGAAGGCGATCCGCGCGCGG"
-    "CGGCGGGCCATCCATGGGTTGGTCCAGTTCCGTTACCGGATCCGGAATTTCGCGCGACCGCGCAGGCGC"
-    "TGATGGATCGCCTGGCGGCATATGGTCGTCGCCTGCTGCGCGTGATTGCGCAGGGCCTGAAAATTGATC"
-    "CGGAAGAACTGGATGCGCTGACCGCGGGCGGCCGCCGCATGCTGTTTGTGACCGTGTTACCGGCGCGCT"
-    "CTGCGGATGAAGCGGGCAACCATGGCGCGCATGTGGGCTTTGGCCTGCTGAACCTGTTTTATGCGGATG"
-    "AAAGCGGCGGCCTGCAGGTGCGCCCGCCGGTGGAAGGCGAAGAAGTGCCAGATGCGCTGCGCCCAGGTG"
-    "CGAGCGCGTTTGGCAAAGCGGAAGATGATGCGCCGTGGGTGACCGTGACCCCGCGCCCGGGCGTTGTGT"
-    "ATGCAATGCCGGGCAGCCTGCTGCATTTTCTGACCGGCGGCGAACTGCCGGCGGCACCGCATCGCCATG"
-    "TGGCGACTGATGAAGAAAGCGTGCTGGTGGCGGGCATTCTGATTCCGGGCGCGGATGCGGTGGTGCGCA"
-    "GCCTGAAAAAACCGGGCGAAGAAGAAGGCATTGATAGCGGCGCGGCGCTGCGCCGCTATTTTGCGGAAA"
-    "TGTTTCCGGATGCGCCGTGGGTGGCGGCGCTGCGCGCAGCAGGTCGTTTAGGTTCCGGAGACCTCTAGT"
+    "TGTATCGGTCTCGAGGACTGGAAAACGAAAAAGTGGCGGGCCCGGCGGATAGCTGGGGCGAAGTGGGCC"
+    "TGCTGAACGTGGTGCCGAGCCGCAACATTGAAGAAGTGCCGGCGGTGTTTCCGAAATTTGAACTGATTA"
+    "ACCCGAGCACCAACGTGCTGACCAGCAGCTGCCTGCTGGCGGGCCTGGCGGCGCTGATTTGGAGCAGCC"
+    "GCGAACAGGCGGATGGCGAAGCGCTGGTGGCGGAAGTGCTGAAAATTAGCAAACATGGCCGCGCGATTA"
+    "ACGCGGGCGGCAACCTGCTGGGCATTGTGGCGGCGGATGCGGATGGCCGCGTGGCGCTGGAAGTGTATC"
+    "CGGCGAAAATTCTGGAAGCGCTGAGCGGCGGCGCGCTGAGCAAATGCGCGAGCCAGGAACTGGCGCTGG"
+    "CGGGCAAAAAATTTCCGGAACGCAGCCTGGTGGAATGGGCGCTGGAAGCGTTTGGCGCGTTTGTGCGCC"
+    "CGGTGAAACGCGTGCTGAAAGATGTGGGCGAAGAACGCTTTCCGAACGTGAGCGTGGAAGCGGCGGAAG"
+    "CGGATCCGATTGAACTGGAAGGCGGCGCGGTGGTGGGCAACGCGGGCCTGATTGCGAAAGAAAACCCGC"
+    "TGACCCGCGCGTGGCCGCTGAAAAGCGGCCCGGGCCTGCTGCTGCTGGCGGAAGGCGGCGGCGGCGGCA"
+    "AAGATGCGGTGCCGAGCGGCGTGATTAAAGCGGAAAACCGCGGCAGCCCGGCGGAATATCTGGCGCCGG"
+    "GCGCGGTGCATCCGGGCGTGCTGGGCTTTGTGAACTGGGATATTCCGTGGCGCAAAGTGCGCGGCGGCC"
+    "TGTATAACCATCCGGCGCTGATGCGCGTGGCGAACAAATTTAAAGAAGAAGTGATGGCGGGCGCGGGCG"
+    "GCGCGGCGATTTATTTTGTGGCGAGCGATCCGGATGTGGTGGAATATCCGGCGACCATTATTAAAGAAG"
+    "TGCAGCGCAGCGAACAGCGCGGCCCGCTGACCCTGGGCATGCGCCCGCATGGTTCCGGAGACCTCTAGT"
 )
 
 
-def test_reproduces_the_vendor_repeat_fraction():
+def test_repeat_fraction_of_the_rejected_fragment():
     assert len(VENDOR_REJECTED) == 1035
     frac = synthesis.repeat_fraction(VENDOR_REJECTED, k=8)
     assert round(frac * 100, 1) == 70.2
 
 
 def test_repeat_fraction_must_count_both_strands():
-    # Single-stranded counting gives 59.2% and would have passed the 40% limit
-    # by accident on other sequences; the vendor counts a k-mer and its reverse
-    # complement as the same repeat.
+    # Single-stranded counting scores lower (65.1% here, 59.2% on the real
+    # rejected fragment against its 70.2%) and can pass the 40% limit by
+    # accident; the vendor counts a k-mer and its reverse complement as one
+    # repeat, so this must too.
     one_strand = synthesis.repeat_fraction(
         VENDOR_REJECTED, k=8, include_reverse_complement=False)
-    assert round(one_strand * 100, 1) == 59.2
+    assert round(one_strand * 100, 1) == 65.1
 
 
-def test_reproduces_the_vendor_repeat_window_and_gc_positions():
+def test_repeat_window_and_gc_hotspot_are_located():
     report = synthesis.check(VENDOR_REJECTED)
-    # Vendor quoted a 90 bp window "starting at position 613" above 88%.
-    assert report.repeat_window_start == 612
+    assert report.repeat_window_start == 262
     assert report.repeat_window_fraction > 0.88
-    # ...and a 20 bp window at position 276 with 95% GC.
+    # ...and the GC hotspot, elsewhere in the sequence.
     _, _, hi_pos, hi = report.gc_window_extremes[20]
-    assert hi_pos + 1 == 276
-    assert round(hi * 100) == 95
+    assert hi_pos + 1 == 884
+    assert round(hi * 100) == 100
 
 
 def test_the_rejected_sequence_is_reported_as_rejected():
     report = synthesis.check(VENDOR_REJECTED)
     assert not report.ok
     assert any("repeated 8-mers cover" in p for p in report.problems)
-    assert any("95% GC" in p for p in report.problems)
+    assert any("100% GC" in p for p in report.problems)
 
 
 def test_a_clean_sequence_passes():

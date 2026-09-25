@@ -18,7 +18,7 @@ Task scripts for nanobody DNA-fragment design.
 
 ## make_nanobody_plate.py
 
-**Inputs** (in `--data-dir`, default `Working folder/260626_NanobodyMuts/`):
+**Inputs** (in `--data-dir`, default `data/runs/nanobody_plate/`):
 
 - `plasmid_database.xlsx` — sheet `Nanobodies` (parent IDs ↔ AA sequences).
 - `recommendations_SetA.tsv`, `recommendations_SetB.tsv` — proposed mutations.
@@ -51,7 +51,7 @@ Parents keep their own ID. Plate `Name` = `"<NbID> <NbID_parent>"` for mutants.
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `--REDA` / `--REDA` | Nb01–Nb07 / Nb50,51,52,53,58 | Parent IDs per set, in plate order. |
+| `--set-a` / `--set-b` | Nb01–Nb07 / Nb50,51,52,53,58 | Parent IDs per set, in plate order. |
 | `--orientation` | `column` | `column` = one group per column; `row` = one group per row. |
 | `--plate-size` | `96` | `96` or `384`. |
 | `--plate-map` | `svg` | Plate-map image: `none`/`svg`/`png`/`both` (SVG needs no deps). |
@@ -77,23 +77,23 @@ python make_nanobody_plate.py
 
 # Row plate: 5 SetA + 3 SetB, 11 mutations each, one parent per row
 python make_nanobody_plate.py --orientation row \
-  --REDA Nb01 Nb02 Nb03 Nb04 Nb05 --REDA Nb50 Nb51 Nb58 \
+  --set-a Nb01 Nb02 Nb03 Nb04 Nb05 --set-b Nb50 Nb51 Nb58 \
   --mutations-per-parent 11 --stamp 260626_row
 
 # 16 parents x 5 mutations, 2 groups per row
 python make_nanobody_plate.py --orientation row --mutations-per-parent 5 \
-  --REDA Nb01 Nb02 Nb03 Nb04 Nb05 Nb06 Nb07 Nb08 \
-  --REDA Nb50 Nb51 Nb52 Nb53 Nb54 Nb55 Nb56 Nb57 --stamp 16x5
+  --set-a Nb01 Nb02 Nb03 Nb04 Nb05 Nb06 Nb07 Nb08 \
+  --set-b Nb50 Nb51 Nb52 Nb53 Nb54 Nb55 Nb56 Nb57 --stamp 16x5
 
 # 24 parents x 3 mutations, 2 groups per column
 python make_nanobody_plate.py --orientation column --mutations-per-parent 3 \
-  --REDA Nb01 Nb02 Nb03 Nb04 Nb05 Nb06 Nb07 Nb08 Nb09 Nb10 Nb11 Nb12 \
-  --REDA Nb50 Nb51 Nb52 Nb53 Nb54 Nb55 Nb56 Nb57 Nb58 Nb59 Nb60 Nb61 \
+  --set-a Nb01 Nb02 Nb03 Nb04 Nb05 Nb06 Nb07 Nb08 Nb09 Nb10 Nb11 Nb12 \
+  --set-b Nb50 Nb51 Nb52 Nb53 Nb54 Nb55 Nb56 Nb57 Nb58 Nb59 Nb60 Nb61 \
   --stamp 24x3
 
 # 384-well: 48 parents x 7 mutations, one parent per column
 python make_nanobody_plate.py --plate-size 384 --stamp 384plate \
-  --REDA <up to 48 ids ...> --REDA <...>
+  --set-a <up to 48 ids ...> --set-b <...>
 ```
 
 The script self-verifies every run (unique wells, translation round-trip,
@@ -111,7 +111,7 @@ existing ones.
 
 ```bash
 python make_db_rows.py --stamp 260626_row \
-    --data-dir "../../Working folder/260720_NanobodyMuts_row_gc72"
+    --data-dir "../../data/runs/260720_NanobodyMuts_row_gc72"
 ```
 
 What lands in each column:
@@ -137,7 +137,7 @@ mapping is missing from the sheet.
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `--data-dir` / `--stamp` | `Working folder/260626_NanobodyMuts` / `260626` | Locate the run, as in `make_nanobody_plate.py`. |
+| `--data-dir` / `--stamp` | `data/runs/nanobody_plate` / `260626` | Locate the run, as in `make_nanobody_plate.py`. |
 | `--mapping` / `--sheet-xlsx` / `--out` | derived from `--data-dir`+`--stamp` | Override individual paths. |
 | `--sheet` | `Nanobodies` | Worksheet whose columns to mirror. |
 | `--include` | `mutants` | `mutants` / `parents` / `all` (parents already exist in the sheet). |

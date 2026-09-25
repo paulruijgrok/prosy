@@ -11,8 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from prosy.core.layout import LayoutError, layout_lines  # noqa: E402
 
-# The 260917 designs design set: six groups, one of them larger than a row.
-REDAC_SIZES = [12, 14, 5, 9, 5, 6]
+# The 260917 enzyme design set: six groups, one of them larger than a row.
+DESIGN_SET_SIZES = [12, 14, 5, 9, 5, 6]
 
 
 def test_each_group_starts_on_a_fresh_row():
@@ -24,7 +24,7 @@ def test_each_group_starts_on_a_fresh_row():
 
 
 def test_no_two_groups_share_a_row():
-    groups = layout_lines(REDAC_SIZES)
+    groups = layout_lines(DESIGN_SET_SIZES)
     rows_per_group = [{w[0] for w in g.wells} for g in groups]
     for i, a in enumerate(rows_per_group):
         for b in rows_per_group[i + 1:]:
@@ -32,7 +32,7 @@ def test_no_two_groups_share_a_row():
 
 
 def test_oversized_group_is_balanced_across_rows_by_default():
-    groups = layout_lines(REDAC_SIZES)
+    groups = layout_lines(DESIGN_SET_SIZES)
     fourteen = groups[1].wells
     assert len(fourteen) == 14
     assert [w for w in fourteen if w[0] == "B"] == [f"B{i}" for i in range(1, 8)]
@@ -40,22 +40,22 @@ def test_oversized_group_is_balanced_across_rows_by_default():
 
 
 def test_fill_rows_packs_to_capacity_instead():
-    groups = layout_lines(REDAC_SIZES, balance_overflow=False)
+    groups = layout_lines(DESIGN_SET_SIZES, balance_overflow=False)
     fourteen = groups[1].wells
     assert len([w for w in fourteen if w[0] == "B"]) == 12
     assert [w for w in fourteen if w[0] == "C"] == ["C1", "C2"]
 
 
-def test_designs_set_occupies_seven_rows_in_order():
-    groups = layout_lines(REDAC_SIZES)
+def test_design_set_occupies_seven_rows_in_order():
+    groups = layout_lines(DESIGN_SET_SIZES)
     used = sorted({w[0] for g in groups for w in g.wells})
     assert used == list("ABCDEFG")           # row H stays free
-    assert [len(g.wells) for g in groups] == REDAC_SIZES
+    assert [len(g.wells) for g in groups] == DESIGN_SET_SIZES
     assert sum(len(g.wells) for g in groups) == 51
 
 
 def test_wells_are_unique_across_the_whole_layout():
-    wells = [w for g in layout_lines(REDAC_SIZES) for w in g.wells]
+    wells = [w for g in layout_lines(DESIGN_SET_SIZES) for w in g.wells]
     assert len(wells) == len(set(wells))
 
 

@@ -1,8 +1,14 @@
 """Tests for prosy.core.antibody CDR annotation.
 
-The expected CDRs are the ones recorded by hand in the lab's nanobody
-spreadsheet ("CDR 1/2/3" columns of the Nanobodies sheet), so this doubles as a
-regression test against the annotations already in use.
+The sequences are **synthetic**: a germline-derived VHH framework with
+randomised CDRs, built by construction so the expected CDR spans are known
+independently of the annotator rather than read back out of it. CDR1 occupies
+26-33, CDR2 51-57 and CDR3 96-110 in every one of them.
+
+(The suite previously pinned these against the hand CDR calls in the lab's
+nanobody spreadsheet, which was the stronger check but shipped real binder
+sequences. Re-point `NANOBODIES` at real parents locally if you want to
+re-verify that agreement.)
 """
 
 from __future__ import annotations
@@ -20,29 +26,33 @@ from prosy.core.antibody import (  # noqa: E402
     cdr_positions,
 )
 
-# name -> (sequence, IMGT CDR1, CDR2, CDR3) as recorded in the lab spreadsheet.
+# name -> (sequence, IMGT CDR1, CDR2, CDR3) - CDRs are known by construction.
 NANOBODIES = {
     "Nb01": (
-        "REDACTED_SEQUENCE",
-        "REDACTED", "REDACTE", "REDACTED_SEQUEN",
+        "QVQLVESGGGLVQAGGSLRLSCAASKDIEDHSRMGWYRQAPGKEREFVAAIQQERNENYADSVKGRFTIS"
+        "RDNAKNTVYLQMNSLKPEDTAVYYCSIAYITNVYGDTDLIWGQGTQVTVSS",
+        "KDIEDHSR", "IQQERNE", "SIAYITNVYGDTDLI",
     ),
     "Nb02": (
-        "REDACTED_SEQUENCE",
-        "REDACTED", "REDACTED", "REDACTED_SEQU",
+        "QVQLVESGGGLVQAGGSLRLSCAASTWIHHDGYMGWYRQAPGKEREFVAAQSSDIIDNYADSVKGRFTIS"
+        "RDNAKNTVYLQMNSLKPEDTAVYYCVFWDWNITGDHQSAAWGQGTQVTVSS",
+        "TWIHHDGY", "QSSDIID", "VFWDWNITGDHQSAA",
     ),
-    "Nb50": (
-        "REDACTED_SEQUENCE",
-        "REDACTED", "REDACTE", "REDACTED_SEQUENC",
+    "Nb03": (
+        "QVQLVESGGGLVQAGGSLRLSCAASGVKHSGHFMGWYRQAPGKEREFVAARHYSLSLNYADSVKGRFTIS"
+        "RDNAKNTVYLQMNSLKPEDTAVYYCGAHKAGRFQLVWLEIWGQGTQVTVSS",
+        "GVKHSGHF", "RHYSLSL", "GAHKAGRFQLVWLEI",
     ),
-    "Nb58": (
-        "REDACTED_SEQUENCE",
-        "REDACTED", "REDACTE", "REDACTED_SEQUENC",
+    "Nb04": (
+        "QVQLVESGGGLVQAGGSLRLSCAASFVSWGNNIMGWYRQAPGKEREFVAAELDVHYNNYADSVKGRFTIS"
+        "RDNAKNTVYLQMNSLKPEDTAVYYCWQFDFDGKILWDSNNWGQGTQVTVSS",
+        "FVSWGNNI", "ELDVHYN", "WQFDFDGKILWDSNN",
     ),
 }
 
 
 @pytest.mark.parametrize("name", sorted(NANOBODIES))
-def test_imgt_cdrs_match_the_lab_annotation(name):
+def test_imgt_cdrs_match_the_constructed_spans(name):
     protein, cdr1, cdr2, cdr3 = NANOBODIES[name]
     ann = annotate(protein, scheme="imgt")
     assert ann.region("CDR1").sequence(protein) == cdr1
@@ -65,12 +75,12 @@ def test_kabat_scheme_gives_the_canonical_h1_and_h2():
     ann = annotate(protein, scheme="kabat")
     assert (ann.region("CDR1").start, ann.region("CDR1").end) == (31, 35)
     assert (ann.region("CDR2").start, ann.region("CDR2").end) == (50, 65)
-    assert ann.region("CDR1").sequence(protein) == "DYVIG"
+    assert ann.region("CDR1").sequence(protein) == "HSRMG"
 
 
 def test_extended_scheme_includes_the_h1_stem():
     protein = NANOBODIES["Nb01"][0]
-    assert annotate(protein, scheme="extended").region("CDR1").sequence(protein) == "REDACTEDIG"
+    assert annotate(protein, scheme="extended").region("CDR1").sequence(protein) == "KDIEDHSRMG"
 
 
 def test_cdr_positions_helper():
@@ -83,7 +93,7 @@ def test_cdr_positions_helper():
 
 
 def test_framework_and_cdr_positions_partition_the_domain():
-    protein = NANOBODIES["Nb50"][0]
+    protein = NANOBODIES["Nb03"][0]
     ann = annotate(protein)
     assert set(ann.cdr_positions()) | set(ann.framework_positions()) == set(
         range(1, len(protein) + 1))

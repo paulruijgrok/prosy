@@ -281,7 +281,7 @@ class SynthesisProfile:
 
 
 #: Thresholds and design settings that produced an accepted order (the 260921
-#: designs plate: 0/84 flagged, repeats <8%, overall GC 55.8%). The GC cap is
+#: design plate: 0/84 flagged, repeats <8%, overall GC 55.8%). The GC cap is
 #: deliberately below the vendor's 58% rule - DNAChisel satisfies a cap by
 #: sitting against it, so targeting the rule itself leaves no margin.
 VENDOR_STANDARD = SynthesisProfile(

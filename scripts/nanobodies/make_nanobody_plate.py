@@ -16,12 +16,12 @@ python make_nanobody_plate.py
 
 # Row plate: 5 SetA + 3 SetB parents, 11 mutations each, one parent per row:
 python make_nanobody_plate.py --orientation row \\
-    --REDA Nb01 Nb02 Nb03 Nb04 Nb05 --REDA Nb50 Nb51 Nb58 \\
+    --set-a Nb01 Nb02 Nb03 Nb04 Nb05 --set-b Nb50 Nb51 Nb58 \\
     --mutations-per-parent 11 --stamp 260626_row
 
 # 16 parents x 5 mutations, 2 groups per row:
 python make_nanobody_plate.py --orientation row --mutations-per-parent 5 \\
-    --REDA ... (8 ids) --REDA ... (8 ids) --stamp 260626_16x5
+    --set-a ... (8 ids) --set-b ... (8 ids) --stamp 260626_16x5
 
 Run with DNAChisel installed to reproduce codon_optimize.py exactly; otherwise a
 dependency-free fallback keeps the pipeline runnable.
@@ -57,13 +57,13 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     p.add_argument("--data-dir", type=Path,
-                   default=_HERE.parents[2] / "Working folder" / "260626_NanobodyMuts",
+                   default=_HERE.parents[2] / "data" / "runs" / "example_run",
                    help="Folder with the xlsx + TSV inputs (outputs written here).")
     p.add_argument("--stamp", default="260626", help="Output filename prefix.")
     # Parent selection
-    p.add_argument("--REDA", nargs="*", default=DEFAULT_SetA, metavar="NbID",
+    p.add_argument("--set-a", nargs="*", default=DEFAULT_SetA, metavar="NbID",
                    help="SetA parent IDs (in plate order).")
-    p.add_argument("--REDA", nargs="*", default=DEFAULT_SetB, metavar="NbID",
+    p.add_argument("--set-b", nargs="*", default=DEFAULT_SetB, metavar="NbID",
                    help="SetB parent IDs (in plate order). Appended after SetA.")
     # Layout
     p.add_argument("--orientation", choices=layout_mod.ORIENTATIONS, default="column",
@@ -104,7 +104,7 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=1)
     args = p.parse_args()
 
-    parent_order = list(args.REDA) + list(args.REDA)
+    parent_order = list(args.set_a) + list(args.set_b)
     cfg = nb.RunConfig(
         flanks=Flanks(five_prime=args.flank_5, three_prime=args.flank_3),
         species=args.species, avoid_enzymes=args.avoid_enzymes,

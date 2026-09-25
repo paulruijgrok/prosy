@@ -8,7 +8,7 @@ the first order was **rejected by the DNA manufacturer** on complexity, and
 fixing that turned out to be a flaw in how we codon-optimize, not a quirk of
 those particular sequences.
 
-### gg002 and the designs enzyme designs
+### gg002 and the enzyme design designs
 
 `gg002` is a pET-type destination: T7 → lacO → RBS → `CATATG`, two
 outward-facing BsaI sites around a 430 bp stuffer, 5244 bp backbone. Required
@@ -116,8 +116,8 @@ python -m pytest tests/ -q          # 119 passed
 
 # The final, accepted order (v3)
 python scripts/designs/make_design_plate.py \
-    --csv "Working folder/260917_designs_enzyme/sequences_bypLDDT.csv" \
-    --destination "Working folder/260917_designs_enzyme/gg002.txt" \
+    --csv "data/runs/enzyme_designs/sequences_bypLDDT.csv" \
+    --destination "data/runs/enzyme_designs/gg002.txt" \
     --layout sequential --orientation column \
     --carry-columns selection_bucket calpha_plddt ni_plddt complex_plddt \
     --flank-5 TGTATCGGTCTCGAGGA --flank-3 GGTTCCGGAGACCTCTAGT \
@@ -129,7 +129,7 @@ python scripts/designs/make_design_plate.py \
     --unique-kmer 8 --min-codon-frequency 0.10 \
     --check-synthesis --max-repeat-fraction 0.40 --max-gc-20 0.90 \
     --check-gc-min 0.40 --check-gc-max 0.58 \
-    --out-dir "Working folder/260917_designs_enzyme" --stamp 260921_designs_v3
+    --out-dir "data/runs/enzyme_designs" --stamp 260921_designs_v3
 ```
 
 Checking any sequence against the vendor rule set:

@@ -1,6 +1,10 @@
-# --- Project data (not part of the package) ---
+# --- Project data (never committed: real sequences, lab spreadsheets) ---
 Working folder/
+data/runs/
 Inspiration code/
+
+# Scratch commit-message files (staged by accident with `git add -A`)
+commit-msg*.txt
 
 # --- Python ---
 __pycache__/

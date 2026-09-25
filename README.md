@@ -22,6 +22,7 @@ ProSy is split in two:
 | [docs/mutational_scans.md](docs/mutational_scans.md) | How the scans and CDR annotation work; position selection, alphabets, boundary schemes. |
 | [docs/golden_gate.md](docs/golden_gate.md) | Type IIS cut geometry, adapter design, assembly simulation, and everything the pipeline verifies. |
 | [Synthesis manufacturability](#synthesis-manufacturability--read-before-ordering-dna) (below) | **Read before ordering DNA.** Why plain codon optimization is not orderable. |
+| [docs/anonymisation.md](docs/anonymisation.md) | What in this repo is synthetic, and how to keep real lab data out of it. |
 
 ## Quick start
 
@@ -185,10 +186,12 @@ with fail-isolation, per-run logging and resume is the next piece of work — se
 | `scripts/designs/` | Design-set plates: a CSV of designed sequences → verified, plated fragments. |
 | `scripts/nanobodies/` | Task scripts: `nanobody_scan.py` (new), `make_nanobody_plate.py` and its helpers (established). |
 | `data/plasmids/` | Destination vectors, resolved by bare name from `--destination`. |
+| `data/examples/` | Synthetic sequences so the docs and tests run from a fresh clone. |
+| `data/runs/` | Real project inputs and outputs. **Gitignored.** |
+| `tools/` | `check_no_lab_data.py` - guards the repo against committed lab sequences. |
 | `docs/` | `cookbook.md` (commands for everything), plus one page per pipeline. |
 | `tests/` | `python -m pytest tests/` — runs green without DNAChisel installed. |
 | `journals/` | Per-session work log. |
-| `Working folder/` | Dated run outputs; not code. |
 
 ## Tests
 

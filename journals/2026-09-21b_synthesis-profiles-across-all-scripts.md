@@ -6,7 +6,7 @@ This session acts on that.
 
 ## What changed and why
 
-The vendor rejection was never really about the designs designs. It was about
+The vendor rejection was never really about the enzyme designs. It was about
 `use_best_codon` being the default everywhere, so **every** pipeline in the repo
 was producing the same repeat-heavy sequences — `make_design_plate.py` had been
 fixed in place, while `make_nanobody_plate.py` and both scan CLIs were still
@@ -112,8 +112,8 @@ The v3 order is now reproducible from the profile alone — no tuning flags:
 
 ```bash
 python scripts/designs/make_design_plate.py \
-    --csv "Working folder/260917_designs_enzyme/sequences_bypLDDT.csv" \
-    --destination "Working folder/260917_designs_enzyme/gg002.txt" \
+    --csv "data/runs/enzyme_designs/sequences_bypLDDT.csv" \
+    --destination "data/runs/enzyme_designs/gg002.txt" \
     --layout sequential --orientation column \
     --flank-5 TGTATCGGTCTCGAGGA --flank-3 GGTTCCGGAGACCTCTAGT \
     --expect-prefix MSG --expect-suffix GSHHHHHH \

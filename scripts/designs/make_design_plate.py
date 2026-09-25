@@ -15,11 +15,11 @@ given (-> 12 + 2).
 
 Examples
 --------
-# The 260917 designs design set into gg002 (BsaI):
+# The 260917 enzyme design set into gg002 (BsaI):
 python make_design_plate.py \\
-    --csv "Working folder/260917_designs_enzyme/sequences.csv" \\
-    --destination "Working folder/260917_designs_enzyme/gg002.txt" \\
-    --out-dir "Working folder/260917_designs_enzyme" --stamp 260918_designs
+    --csv "data/runs/enzyme_designs/sequences.csv" \\
+    --destination "data/runs/enzyme_designs/gg002.txt" \\
+    --out-dir "data/runs/enzyme_designs" --stamp 260918_designs
 
 # A different column layout, 384-well, no windowed GC cap:
 python make_design_plate.py --csv designs.csv --destination gg002 \\

@@ -14,7 +14,7 @@ formulas. Everything else is filled from the run.
 Example
 -------
     python make_db_rows.py --stamp 260626_row \
-        --data-dir "../../Working folder/260720_NanobodyMuts_row_gc72"
+        --data-dir "../../data/runs/260720_NanobodyMuts_row_gc72"
 """
 
 from __future__ import annotations
@@ -230,7 +230,7 @@ def write_xlsx(rows: list[dict], columns: list[str], path: Path) -> Path:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     here = Path(__file__).resolve().parent
-    default_data = here / ".." / ".." / "Working folder" / "260626_NanobodyMuts"
+    default_data = here / ".." / ".." / "data" / "runs" / "260626_NanobodyMuts"
 
     p = argparse.ArgumentParser(
         description="Build lab-sheet database rows from a nanobody plate run.")

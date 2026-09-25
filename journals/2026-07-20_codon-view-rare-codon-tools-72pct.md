@@ -64,16 +64,16 @@ python -m pytest tests/ -q                       # 35 passed
 cd scripts/nanobodies
 # Production order at 72% (inputs copied into the new dir first)
 python make_nanobody_plate.py --backend dnachisel --gc-window 50 --gc-max 72 \
-  --stamp 260626 --data-dir "../../Working folder/260720_NanobodyMuts_gc72"
+  --stamp 260626 --data-dir "../../data/runs/nanobody_plate"
 
 # Codon views (text + HTML + PDF) and rare-codon scan
-python codon_view.py --input "../../Working folder/260720_NanobodyMuts_gc72/260626_nanobody_mapping.csv"
+python codon_view.py --input "../../data/runs/nanobody_plate/260626_nanobody_mapping.csv"
 python rare_codon_scan.py --show-runs \
-  --input "../../Working folder/260626_NanobodyMuts/260626_nanobody_mapping.csv" \
-          "../../Working folder/260720_NanobodyMuts_gc72/260626_nanobody_mapping.csv"
+  --input "../../data/runs/nanobody_plate/260626_nanobody_mapping.csv" \
+          "../../data/runs/nanobody_plate/260626_nanobody_mapping.csv"
 ```
 
-Output dirs: `Working folder/260720_NanobodyMuts_gc72/` (production, 72%),
+Output dirs: `data/runs/nanobody_plate/` (production, 72%),
 `..._gc75/` (74% interim), `260626_NanobodyMuts/` (June 26 original) — all have
 `*_codons.{txt,html,pdf}`.
 

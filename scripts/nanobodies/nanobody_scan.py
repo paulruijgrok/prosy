@@ -50,7 +50,7 @@ from prosy.core import antibody  # noqa: E402
 from prosy.core import io  # noqa: E402
 from prosy.core.sequence import validate_protein  # noqa: E402
 
-DEFAULT_XLSX = _HERE.parents[2] / "Working folder" / "260825" / "plasmid_database.xlsx"
+DEFAULT_XLSX = _HERE.parents[2] / "data" / "runs" / "plasmid_database.xlsx"
 DEFAULT_SHEET = "Nanobodies"
 DEFAULT_DESTINATION = "FP01"
 REGIONS = ("cdr", "cdr1", "cdr2", "cdr3", "framework", "all")

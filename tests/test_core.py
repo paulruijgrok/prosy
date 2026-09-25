@@ -15,7 +15,7 @@ from prosy.core.sequence import (
     PointMutation, apply_mutation, reverse_complement, translate,
 )
 
-PROTEIN = "REDACTED_SEQUENCE"
+PROTEIN = "QVQLVESGGGLVQAGGSLRLSCAASKDIEDHSRMGWYRQAPGKEREFVAAIQQERNENYADSVKGRFTISRDNAKNTVYLQMNSLKPEDTAVYYCSIAYITNVYGDTDLIWGQGTQVTVSS"
 
 
 def test_genetic_code_translation():

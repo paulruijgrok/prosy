@@ -12,7 +12,7 @@ Two tiers:
   to, and check the Python blocks compile. This catches renamed and invented
   flags without running any optimization.
 * **Smoke (opt-in, minutes).** Actually execute every bash block, in a sandbox
-  copy of the repo so nothing writes into the real ``Working folder/``. Enable
+  copy of the repo so nothing writes into the real ``data/runs/``. Enable
   with ``PROSY_RUN_COOKBOOK=1 pytest tests/test_cookbook.py``. Run it before
   committing changes to the cookbook or to any CLI's arguments.
 
@@ -36,10 +36,10 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[1]
 COOKBOOK = _ROOT / "docs" / "cookbook.md"
 
-SKIP_MARKER = "<!-- cookbook:skip -->"
+SKIP_MARKER = "<!-- cookbook:skip"      # optionally followed by a reason
 _FENCE = re.compile(r"^```(\w+)?\s*$")
 #: Data the cookbook uses that is gitignored, so absent from a fresh clone.
-_OPTIONAL_PREFIX = "Working folder/"
+_OPTIONAL_PREFIX = "data/runs/"
 
 
 @dataclass
@@ -67,7 +67,7 @@ def parse_blocks(markdown: str) -> list[Block]:
             i += 1
             continue
         language = match.group(1) or ""
-        skip = i > 0 and lines[i - 1].strip() == SKIP_MARKER
+        skip = i > 0 and lines[i - 1].strip().startswith(SKIP_MARKER)
         start = i + 1
         j = start
         while j < len(lines) and not _FENCE.match(lines[j]):
@@ -158,17 +158,19 @@ def test_repo_paths_referenced_by_the_cookbook_exist(bash_blocks, blocks):
     """Paths under version control must exist; lab data may legitimately not."""
     text = COOKBOOK.read_text(encoding="utf-8")
     referenced = set(re.findall(r'"?((?:data|scripts|prosy|tests)/[\w./-]+)"?', text))
-    missing = sorted(p for p in referenced if not (_ROOT / p).exists())
+    missing = sorted(p for p in referenced
+                     if not p.startswith(_OPTIONAL_PREFIX)      # gitignored lab data
+                     and not (_ROOT / p).exists())
     assert not missing, f"cookbook references missing repo paths: {missing}"
 
 
 def test_lab_data_paths_are_flagged_as_optional():
-    """`Working folder/` is gitignored, so those commands cannot run on a fresh
+    """`data/runs/` is gitignored, so those commands cannot run on a fresh
     clone. The cookbook has to say so, or a new user hits confusing failures."""
     text = COOKBOOK.read_text(encoding="utf-8")
     if _OPTIONAL_PREFIX in text:
         assert "gitignored" in text or "not in the repo" in text, (
-            "cookbook uses 'Working folder/' paths without warning that they are "
+            "cookbook uses 'data/runs/' paths without warning that they are "
             "lab data absent from a fresh clone")
 
 
@@ -188,18 +190,28 @@ def sandbox(tmp_path_factory) -> Path:
     dest = tmp_path_factory.mktemp("cookbook_repo")
     for name in ("prosy", "scripts", "data", "docs"):
         shutil.copytree(_ROOT / name, dest / name)
-    working = _ROOT / "Working folder"
-    if working.exists():
-        shutil.copytree(working, dest / "Working folder",
+    runs = _ROOT / "data" / "runs"
+    if runs.exists():
+        shutil.copytree(runs, dest / "data" / "runs",
                         ignore=shutil.ignore_patterns("*.png", "*.svg", "*.pdf"))
     return dest
 
 
 @run_cookbook
-def test_every_bash_block_runs(bash_blocks, sandbox):
+def test_every_bash_block_runs(bash_blocks, sandbox, capsys):
+    """Execute what a fresh clone can execute.
+
+    Blocks that reference gitignored lab data are reported as skipped rather
+    than failed: the repo does not ship those inputs, so their commands cannot
+    be verified here. Everything built on `data/` must run.
+    """
     failures: list[str] = []
+    skipped = 0
     for block in bash_blocks:
         if block.skip:
+            continue
+        if _OPTIONAL_PREFIX in block.body:
+            skipped += 1
             continue
         result = subprocess.run(
             ["bash", "-euo", "pipefail", "-c", block.body],
@@ -210,6 +222,9 @@ def test_every_bash_block_runs(bash_blocks, sandbox):
             tail = (result.stderr or result.stdout).strip().splitlines()[-4:]
             failures.append(f"line {block.line} exited {result.returncode}:\n    "
                             + "\n    ".join(tail))
+    with capsys.disabled():
+        ran = sum(1 for b in bash_blocks if not b.skip) - skipped
+        print(f"\n  ran {ran} block(s); skipped {skipped} needing gitignored lab data")
     assert not failures, "cookbook commands failed:\n" + "\n".join(failures)
 
 

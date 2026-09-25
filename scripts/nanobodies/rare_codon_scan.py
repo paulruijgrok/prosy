@@ -12,7 +12,7 @@ GGA (Gly). GGG (Gly) is borderline and reported separately as "watch".
 
 Example:
     python rare_codon_scan.py \
-        --input "../../Working folder/260720_NanobodyMuts_gc75/260626_nanobody_mapping.csv"
+        --input "../../data/runs/nanobody_plate/260626_nanobody_mapping.csv"
 """
 from __future__ import annotations
 

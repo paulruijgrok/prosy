@@ -109,7 +109,7 @@ ruff check prosy scripts tests --select F401,F841
 vulture prosy scripts --min-confidence 80
 
 # The four worked-example runs (Nb01 -> FP01, BsaI, 50 bp / 72% GC cap)
-OUT="Working folder/260901_Nb01_scans"
+OUT="data/runs/260901_Nb01_scans"
 python scripts/nanobodies/nanobody_scan.py --parent Nb01 --scan alanine \
     --fragments --gc-window 50 --gc-max 0.72 --assembly-checks -1 \
     --out-dir "$OUT" --stamp 260901_Nb01_ala_cdr
@@ -143,7 +143,7 @@ orf_protein(assemble(fp01, [fragment], "BsaI"))
 `python -m pytest tests/` → **94 passed** (green without DNAChisel installed).
 `ruff check --select F401,F841` clean, `vulture --min-confidence 80` clean.
 
-Worked example in `Working folder/260901_Nb01_scans/` — Nb01, FP01, BsaI,
+Worked example in `data/runs/260901_Nb01_scans/` — Nb01, FP01, BsaI,
 DNAChisel, 50 bp / 72% GC cap, all four runs reporting *All checks passed*:
 
 | run | count | fragments |

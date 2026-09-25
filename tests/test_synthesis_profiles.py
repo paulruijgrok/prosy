@@ -21,7 +21,7 @@ from prosy.core.optimize import build_fragment_with_ladder  # noqa: E402
 from prosy.core.sequence import translate  # noqa: E402
 
 PROTEIN = (
-    "REDACTED_SEQUENCE"
+    "QVQLVESGGGLVQAGGSLRLSCAASKDIEDHSRMGWYRQAPGKEREFVAAIQQERNENYADSVKGRFTISRDNAKNTVYLQMNSLKPEDTAVYYCSIAYITNVYGDTDLIWGQGTQVTVSS"
 )
 needs_dnachisel = pytest.mark.skipif(
     not codon_mod.dnachisel_available(), reason="dnachisel not installed")

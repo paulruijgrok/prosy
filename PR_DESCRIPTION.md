@@ -91,7 +91,7 @@ finds that from the sequence rather than from a comment.
   product contains zero BsaI sites. Negative controls are tested too: a
   one-base overhang change and an internal BsaI site both raise `CloningError`.
 - **Worked example, all four runs passing every check**
-  (`Working folder/260901_Nb01_scans/`, DNAChisel backend, 50 bp / 72% GC cap):
+  (`data/runs/260901_Nb01_scans/`, DNAChisel backend, 50 bp / 72% GC cap):
 
   | run | variants | fragments | plates |
   |---|---|---|---|

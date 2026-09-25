@@ -10,7 +10,7 @@ grouped by chemical class).
 Example:
     conda activate DataAnalysis
     python codon_view.py \
-        --input "../../Working folder/260720_NanobodyMuts_gc75/260626_nanobody_mapping.csv"
+        --input "../../data/runs/nanobody_plate/260626_nanobody_mapping.csv"
 
 Layout styles (``--style``):
 

@@ -9,7 +9,7 @@ especially near the 5' end.
 Example:
     conda activate DataAnalysis
     python gc_sliding_window.py \
-        --input "../../Working folder/260626_NanobodyMuts/260626_nanobody_mapping.csv" \
+        --input "../../data/runs/nanobody_plate/260626_nanobody_mapping.csv" \
         --window 50 --step 1 --out gc_profiles.csv
 """
 import argparse

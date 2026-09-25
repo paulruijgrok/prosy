@@ -19,7 +19,7 @@ python -m pytest tests/ -q          # sanity check: expect all green
 - `data/…` is shipped with the repo, so those commands run from a fresh clone.
   `data/examples/nb01.fa` is a sample VHH, `data/plasmids/FP01.fa` a sample
   destination vector.
-- `Working folder/…` is **lab data: gitignored, not in the repo**. Those
+- `data/runs/…` is **lab data: gitignored, not in the repo**. Those
   commands are the real historical invocations, kept as worked examples — swap
   in your own paths, or skip them on a fresh clone.
 
@@ -76,10 +76,10 @@ product is short and a frame slip would silently drop a tag:
 
 ```bash
 python scripts/scan/mutational_scan.py \
-    --protein-file "Working folder/260917_designs_enzyme/designs01.fasta" \
-    --name designs01 --scan alanine --positions 100-110 \
+    --protein-file "data/runs/enzyme_designs/enzyme01.fasta" \
+    --name enzyme01 --scan alanine --positions 100-110 \
     --fragments \
-    --destination "Working folder/260917_designs_enzyme/gg002.txt" \
+    --destination "data/runs/enzyme_designs/gg002.txt" \
     --flank-5 TGTATCGGTCTCGAGGA --flank-3 GGTTCCGGAGACCTCTAGT \
     --expect-prefix MSG --expect-suffix GSHHHHHH \
     --out-dir /tmp/scan --stamp ala_dna_gg002
@@ -99,6 +99,7 @@ Same three scans; parents come from the lab spreadsheet by ID, and the target
 set defaults to the CDRs (IMGT, matching the sheet's own CDR columns).
 Destination defaults to FP01.
 
+<!-- cookbook:skip needs the lab spreadsheet in data/runs/ -->
 ```bash
 # Alanine scan of all three CDRs, through to fragments
 python scripts/nanobodies/nanobody_scan.py \
@@ -117,15 +118,19 @@ python scripts/nanobodies/nanobody_scan.py \
 ```
 
 `--region` takes `cdr` (default), `cdr1`/`cdr2`/`cdr3`, `framework` or `all`;
-an explicit `--positions` always wins. `--protein …` skips the spreadsheet.
+an explicit `--positions` always wins. These look the parent up in the lab
+spreadsheet, so on a fresh clone use `--protein <sequence>` or
+`--protein-file data/examples/nb01.fa` with `scripts/scan/mutational_scan.py`
+instead.
 
 ## 4. Nanobody mutation plates
 
 The original pipeline: each parent plus its top-N recommended mutations fills a
 plate column or row.
 
+<!-- cookbook:skip needs the lab spreadsheet in data/runs/ -->
 ```bash
-DATA="Working folder/260720_NanobodyMuts_gc72"
+DATA="data/runs/nanobody_plate"
 
 # 12 parents x 7 mutations, one parent per column (the 260626 layout)
 python scripts/nanobodies/make_nanobody_plate.py \
@@ -134,7 +139,7 @@ python scripts/nanobodies/make_nanobody_plate.py \
 # Row layout: 5 SetA + 3 SetB parents, 11 mutations each
 python scripts/nanobodies/make_nanobody_plate.py \
     --data-dir "$DATA" --stamp demo_row --orientation row \
-    --REDA Nb01 Nb02 Nb03 Nb04 Nb05 --REDA Nb50 Nb51 Nb58 \
+    --set-a Nb01 Nb02 Nb03 Nb04 Nb05 --set-b Nb50 Nb51 Nb58 \
     --mutations-per-parent 11 --plate-map svg
 ```
 
@@ -146,7 +151,7 @@ outputs are written there too.
 A CSV of designed sequences → a verified, plated order. Two layout modes.
 
 ```bash
-DIR="Working folder/260917_designs_enzyme"
+DIR="data/runs/enzyme_designs"
 
 # One design group per plate row (oversized groups spill, balanced 7+7)
 python scripts/designs/make_design_plate.py \
@@ -176,7 +181,7 @@ traces back to the scores. Column names are configurable with `--id-column`,
 All four take a run's mapping CSV.
 
 ```bash
-MAP="Working folder/260720_NanobodyMuts_gc72/260626_nanobody_mapping.csv"
+MAP="data/runs/nanobody_plate/260626_nanobody_mapping.csv"
 
 # Sliding-window GC: long CSV + overlay plot, flagging out-of-bounds windows
 python scripts/nanobodies/gc_sliding_window.py \
@@ -195,7 +200,7 @@ Turning a run into rows for the lab spreadsheet:
 
 ```bash
 python scripts/nanobodies/make_db_rows.py \
-    --data-dir "Working folder/260720_NanobodyMuts_gc72" --stamp 260626 \
+    --data-dir "data/runs/nanobody_plate" --stamp 260626 \
     --out /tmp/db_rows.xlsx
 ```
 
@@ -221,8 +226,8 @@ print(design_insert_flanks(ends, "BsaI"))             # the adapters to use
 
 # Simulate the reaction with a real fragment and read the product back.
 row = next(iter(csv.DictReader(open(
-    "Working folder/260917_designs_enzyme/260921_designs_v3_mapping.csv"))))
-gg002 = load("Working folder/260917_designs_enzyme/gg002.txt")
+    "data/runs/enzyme_designs/260921_designs_v3_mapping.csv"))))
+gg002 = load("data/runs/enzyme_designs/gg002.txt")
 product = assemble(gg002, [row["Final_DNA"]], "BsaI")
 print(len(product), orf_protein(product)[:12])        # 6249 MSGAAEVTEVEV
 
@@ -232,10 +237,10 @@ print(report.ok, report.summary())
 # True 1035 bp  GC 55.9%  repeat8 2.3%  dens 8.9%  GC20max 80%
 
 # Where are a nanobody's CDRs?
-ann = antibody.annotate("QVQLVESGGGLVQAGGSLRLREDACTED_SEQUENCEAPGKQREWVATFT"
-                        "SSGDANYADSVKGRFTISRDNAKSTVYLQMNSLKPEDTAVYYCNADVYGWGY"
+ann = antibody.annotate("QVQLVESGGGLVQAGGSLRLSCAASKDIEDHSRMGWYRQAPGKEREFVAAIQ"
+                        "QERNENYADSVKGRFTISRDNAKNTVYLQMNSLKPEDTAVYYCSIAYITNVY"
                         "TSYSDYWGQGTQVTVSS")
-print(ann.describe())      # CDR1 26-33 REDACTED  CDR2 51-57 REDACTE  CDR3 96-110 …
+print(ann.describe())      # CDR1 26-33 KDIEDHSR  CDR2 51-57 IQQERNE  CDR3 96-110 …
 print(ann.cdr_positions("CDR3"))
 ```
 
@@ -268,9 +273,15 @@ September 2026 rejection happened.
 **Compare against unconstrained output** (diagnosis only, never for ordering):
 
 ```bash
-python scripts/nanobodies/nanobody_scan.py --parent Nb01 --scan alanine \
-    --fragments --synthesis-profile none --out-dir /tmp/legacy --stamp legacy
+python scripts/scan/mutational_scan.py \
+    --protein-file data/examples/designed_enzyme.fa --name enzyme01 \
+    --scan alanine --positions 100-103 --fragments --destination FP01 \
+    --synthesis-profile none --no-check-synthesis \
+    --out-dir /tmp/legacy --stamp legacy
 ```
+
+Drop `--no-check-synthesis` and the run fails with the vendor's own complaints —
+which is the point: a 333 aa design optimized the naive way is not orderable.
 
 **Reproduce an order.** Re-running the same command with the same `--seed`
 gives the same sequences, and a sequence does not change if other designs are
@@ -292,7 +303,7 @@ in-silico assembly if you only want sequences; `-1` assembles all of them.
 | `Expected exactly one …-free backbone fragment` | The plasmid's Type IIS sites don't face outward from a stuffer, or there are more than two. |
 | Windowed GC breaches with no explanation | The dependency-free fallback backend is running. Install `.[optimize]`. |
 | `Parents not found in sheet` | `--data-dir` lacks `plasmid_database.xlsx`, or the IDs aren't in the `Nanobodies` sheet. |
-| `No such file or directory: 'Working folder/…'` | That's lab data, gitignored and absent from a fresh clone. Use your own paths, or the `data/` examples. |
+| `No such file or directory: 'data/runs/…'` | That's lab data, gitignored and absent from a fresh clone. Use your own paths, or the `data/` examples. |
 
 ## 10. Keeping this page honest
 
@@ -310,7 +321,7 @@ here once.
 python -m pytest tests/test_cookbook.py -q
 
 # Smoke — opt-in, minutes. Actually executes every bash block, in a sandbox
-# copy of the repo so nothing writes into the real Working folder.
+# copy of the repo so nothing writes into the real the run folder.
 PROSY_RUN_COOKBOOK=1 python -m pytest tests/test_cookbook.py -q
 ```
 
