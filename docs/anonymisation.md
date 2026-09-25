@@ -9,8 +9,8 @@ and no internal project or target names.**
 |---|---|
 | 4 real VHH parents in the tests | Synthetic VHHs: germline-derived framework, randomised CDRs. CDR1 = 26-33, CDR2 = 51-57, CDR3 = 96-110 *by construction*, so the annotator is tested against known ground truth. |
 | A real 1035 bp rejected design in `tests/test_synthesis.py` | A synthetic 333 aa protein with de-novo-like composition, codon-optimized the naive way. It reproduces the same failure mode at almost the same magnitude (70.2% repeat coverage in both cases). |
-| Lab spreadsheet name, `SetA`/`SetB` set names, design-run codenames | `plasmid_database.xlsx`, `SetA`/`SetB`, `design_group_a…f`. |
-| `Working folder/<dated run>/…` paths | `data/runs/…`, which is gitignored. |
+| Lab spreadsheet filename, internal antibody-set names, design-run codenames | `plasmid_database.xlsx`, `SetA`/`SetB`, `design_group_a…f`. |
+| Dated run-folder paths naming internal projects | `data/runs/…`, which is gitignored. |
 
 Destination vectors (`data/plasmids/FP01.fa`) were **kept** — a cloning vector
 is not confidential design output.
